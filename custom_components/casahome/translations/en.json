@@ -46,5 +46,60 @@
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "onboarding": "Onboarding",
+          "active": "Active",
+          "inactive": "Inactive"
+        }
+      },
+      "plan_state": {
+        "name": "Plan state"
+      },
+      "requests_badge": {
+        "name": "Unread requests"
+      },
+      "recurring_vendors_badge": {
+        "name": "Unread recurring vendors"
+      },
+      "mailbox_badge": {
+        "name": "Unread mail"
+      },
+      "badge_total": {
+        "name": "Unread total"
+      },
+      "pending_agreements": {
+        "name": "Pending agreements",
+        "state_attributes": {
+          "names": {
+            "name": "Agreement names"
+          }
+        }
+      }
+    },
+    "binary_sensor": {
+      "has_pending_agreements": {
+        "name": "Agreement needs signature"
+      },
+      "membership_active": {
+        "name": "Membership active"
+      },
+      "has_payment_method": {
+        "name": "Payment method on file"
+      },
+      "has_pending_post_onboarding": {
+        "name": "Post-onboarding steps pending"
+      },
+      "calendar_sync_active": {
+        "name": "Calendar sync"
+      },
+      "casa_collective": {
+        "name": "Casa Collective member"
+      }
+    }
   }
 }

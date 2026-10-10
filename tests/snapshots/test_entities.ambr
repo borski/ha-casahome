@@ -1,0 +1,678 @@
+# serializer version: 1
+# name: test_entity_snapshots[binary_sensor][binary_sensor.123_example_st_springfield_ca_00000_agreement_needs_signature-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': None,
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'binary_sensor',
+    'entity_category': None,
+    'entity_id': 'binary_sensor.123_example_st_springfield_ca_00000_agreement_needs_signature',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Agreement needs signature',
+    'options': dict({
+    }),
+    'original_device_class': <BinarySensorDeviceClass.PROBLEM: 'problem'>,
+    'original_icon': None,
+    'original_name': 'Agreement needs signature',
+    'platform': 'casahome',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': 'has_pending_agreements',
+    'unique_id': '00000000-0000-4000-8000-000000000002_has_pending_agreements',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_entity_snapshots[binary_sensor][binary_sensor.123_example_st_springfield_ca_00000_agreement_needs_signature-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'problem',
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: '123 Example St, Springfield, CA 00000 Agreement needs signature',
+    }),
+    'context': <ANY>,
+    'entity_id': 'binary_sensor.123_example_st_springfield_ca_00000_agreement_needs_signature',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'on',
+  })
+# ---
+# name: test_entity_snapshots[binary_sensor][binary_sensor.123_example_st_springfield_ca_00000_calendar_sync-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': None,
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'binary_sensor',
+    'entity_category': <EntityCategory.DIAGNOSTIC: 'diagnostic'>,
+    'entity_id': 'binary_sensor.123_example_st_springfield_ca_00000_calendar_sync',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Calendar sync',
+    'options': dict({
+    }),
+    'original_device_class': <BinarySensorDeviceClass.CONNECTIVITY: 'connectivity'>,
+    'original_icon': None,
+    'original_name': 'Calendar sync',
+    'platform': 'casahome',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': 'calendar_sync_active',
+    'unique_id': '00000000-0000-4000-8000-000000000002_calendar_sync_active',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_entity_snapshots[binary_sensor][binary_sensor.123_example_st_springfield_ca_00000_calendar_sync-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'connectivity',
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: '123 Example St, Springfield, CA 00000 Calendar sync',
+    }),
+    'context': <ANY>,
+    'entity_id': 'binary_sensor.123_example_st_springfield_ca_00000_calendar_sync',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'off',
+  })
+# ---
+# name: test_entity_snapshots[binary_sensor][binary_sensor.123_example_st_springfield_ca_00000_casa_collective_member-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': None,
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': <RegistryEntryDisabler.INTEGRATION: 'integration'>,
+    'domain': 'binary_sensor',
+    'entity_category': <EntityCategory.DIAGNOSTIC: 'diagnostic'>,
+    'entity_id': 'binary_sensor.123_example_st_springfield_ca_00000_casa_collective_member',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Casa Collective member',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': 'mdi:account-group',
+    'original_name': 'Casa Collective member',
+    'platform': 'casahome',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': 'casa_collective',
+    'unique_id': '00000000-0000-4000-8000-000000000002_casa_collective',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_entity_snapshots[binary_sensor][binary_sensor.123_example_st_springfield_ca_00000_membership_active-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': None,
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'binary_sensor',
+    'entity_category': None,
+    'entity_id': 'binary_sensor.123_example_st_springfield_ca_00000_membership_active',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Membership active',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': 'mdi:home-heart',
+    'original_name': 'Membership active',
+    'platform': 'casahome',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': 'membership_active',
+    'unique_id': '00000000-0000-4000-8000-000000000002_membership_active',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_entity_snapshots[binary_sensor][binary_sensor.123_example_st_springfield_ca_00000_membership_active-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: '123 Example St, Springfield, CA 00000 Membership active',
+      <EntityStateAttribute.ICON: 'icon'>: 'mdi:home-heart',
+    }),
+    'context': <ANY>,
+    'entity_id': 'binary_sensor.123_example_st_springfield_ca_00000_membership_active',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'off',
+  })
+# ---
+# name: test_entity_snapshots[binary_sensor][binary_sensor.123_example_st_springfield_ca_00000_payment_method_on_file-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': None,
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'binary_sensor',
+    'entity_category': <EntityCategory.DIAGNOSTIC: 'diagnostic'>,
+    'entity_id': 'binary_sensor.123_example_st_springfield_ca_00000_payment_method_on_file',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Payment method on file',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': 'mdi:credit-card-check',
+    'original_name': 'Payment method on file',
+    'platform': 'casahome',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': 'has_payment_method',
+    'unique_id': '00000000-0000-4000-8000-000000000002_has_payment_method',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_entity_snapshots[binary_sensor][binary_sensor.123_example_st_springfield_ca_00000_payment_method_on_file-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: '123 Example St, Springfield, CA 00000 Payment method on file',
+      <EntityStateAttribute.ICON: 'icon'>: 'mdi:credit-card-check',
+    }),
+    'context': <ANY>,
+    'entity_id': 'binary_sensor.123_example_st_springfield_ca_00000_payment_method_on_file',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'on',
+  })
+# ---
+# name: test_entity_snapshots[binary_sensor][binary_sensor.123_example_st_springfield_ca_00000_post_onboarding_steps_pending-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': None,
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'binary_sensor',
+    'entity_category': <EntityCategory.DIAGNOSTIC: 'diagnostic'>,
+    'entity_id': 'binary_sensor.123_example_st_springfield_ca_00000_post_onboarding_steps_pending',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Post-onboarding steps pending',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': 'mdi:clipboard-clock',
+    'original_name': 'Post-onboarding steps pending',
+    'platform': 'casahome',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': 'has_pending_post_onboarding',
+    'unique_id': '00000000-0000-4000-8000-000000000002_has_pending_post_onboarding',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_entity_snapshots[binary_sensor][binary_sensor.123_example_st_springfield_ca_00000_post_onboarding_steps_pending-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: '123 Example St, Springfield, CA 00000 Post-onboarding steps pending',
+      <EntityStateAttribute.ICON: 'icon'>: 'mdi:clipboard-clock',
+    }),
+    'context': <ANY>,
+    'entity_id': 'binary_sensor.123_example_st_springfield_ca_00000_post_onboarding_steps_pending',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'on',
+  })
+# ---
+# name: test_entity_snapshots[sensor][sensor.123_example_st_springfield_ca_00000_pending_agreements-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': dict({
+      <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+    }),
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'sensor',
+    'entity_category': <EntityCategory.DIAGNOSTIC: 'diagnostic'>,
+    'entity_id': 'sensor.123_example_st_springfield_ca_00000_pending_agreements',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Pending agreements',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': 'mdi:file-sign',
+    'original_name': 'Pending agreements',
+    'platform': 'casahome',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': 'pending_agreements',
+    'unique_id': '00000000-0000-4000-8000-000000000002_pending_agreements',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_entity_snapshots[sensor][sensor.123_example_st_springfield_ca_00000_pending_agreements-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: '123 Example St, Springfield, CA 00000 Pending agreements',
+      <EntityStateAttribute.ICON: 'icon'>: 'mdi:file-sign',
+      'names': list([
+        'Member Terms of Use',
+      ]),
+      <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+    }),
+    'context': <ANY>,
+    'entity_id': 'sensor.123_example_st_springfield_ca_00000_pending_agreements',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': '1',
+  })
+# ---
+# name: test_entity_snapshots[sensor][sensor.123_example_st_springfield_ca_00000_plan_state-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': None,
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'sensor',
+    'entity_category': <EntityCategory.DIAGNOSTIC: 'diagnostic'>,
+    'entity_id': 'sensor.123_example_st_springfield_ca_00000_plan_state',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Plan state',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': None,
+    'original_name': 'Plan state',
+    'platform': 'casahome',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': 'plan_state',
+    'unique_id': '00000000-0000-4000-8000-000000000002_plan_state',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_entity_snapshots[sensor][sensor.123_example_st_springfield_ca_00000_plan_state-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: '123 Example St, Springfield, CA 00000 Plan state',
+    }),
+    'context': <ANY>,
+    'entity_id': 'sensor.123_example_st_springfield_ca_00000_plan_state',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'never_paid',
+  })
+# ---
+# name: test_entity_snapshots[sensor][sensor.123_example_st_springfield_ca_00000_status-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': dict({
+      <SensorEntityCapabilityAttribute.OPTIONS: 'options'>: list([
+        'onboarding',
+        'active',
+        'inactive',
+      ]),
+    }),
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'sensor',
+    'entity_category': None,
+    'entity_id': 'sensor.123_example_st_springfield_ca_00000_status',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Status',
+    'options': dict({
+    }),
+    'original_device_class': <SensorDeviceClass.ENUM: 'enum'>,
+    'original_icon': None,
+    'original_name': 'Status',
+    'platform': 'casahome',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': 'status',
+    'unique_id': '00000000-0000-4000-8000-000000000002_status',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_entity_snapshots[sensor][sensor.123_example_st_springfield_ca_00000_status-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'enum',
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: '123 Example St, Springfield, CA 00000 Status',
+      <SensorEntityCapabilityAttribute.OPTIONS: 'options'>: list([
+        'onboarding',
+        'active',
+        'inactive',
+      ]),
+    }),
+    'context': <ANY>,
+    'entity_id': 'sensor.123_example_st_springfield_ca_00000_status',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'onboarding',
+  })
+# ---
+# name: test_entity_snapshots[sensor][sensor.123_example_st_springfield_ca_00000_unread_mail-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': dict({
+      <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+    }),
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'sensor',
+    'entity_category': None,
+    'entity_id': 'sensor.123_example_st_springfield_ca_00000_unread_mail',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Unread mail',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': 'mdi:mailbox',
+    'original_name': 'Unread mail',
+    'platform': 'casahome',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': 'mailbox_badge',
+    'unique_id': '00000000-0000-4000-8000-000000000002_mailbox_badge',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_entity_snapshots[sensor][sensor.123_example_st_springfield_ca_00000_unread_mail-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: '123 Example St, Springfield, CA 00000 Unread mail',
+      <EntityStateAttribute.ICON: 'icon'>: 'mdi:mailbox',
+      <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+    }),
+    'context': <ANY>,
+    'entity_id': 'sensor.123_example_st_springfield_ca_00000_unread_mail',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': '0',
+  })
+# ---
+# name: test_entity_snapshots[sensor][sensor.123_example_st_springfield_ca_00000_unread_recurring_vendors-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': dict({
+      <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+    }),
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'sensor',
+    'entity_category': None,
+    'entity_id': 'sensor.123_example_st_springfield_ca_00000_unread_recurring_vendors',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Unread recurring vendors',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': 'mdi:account-wrench',
+    'original_name': 'Unread recurring vendors',
+    'platform': 'casahome',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': 'recurring_vendors_badge',
+    'unique_id': '00000000-0000-4000-8000-000000000002_recurring_vendors_badge',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_entity_snapshots[sensor][sensor.123_example_st_springfield_ca_00000_unread_recurring_vendors-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: '123 Example St, Springfield, CA 00000 Unread recurring vendors',
+      <EntityStateAttribute.ICON: 'icon'>: 'mdi:account-wrench',
+      <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+    }),
+    'context': <ANY>,
+    'entity_id': 'sensor.123_example_st_springfield_ca_00000_unread_recurring_vendors',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': '0',
+  })
+# ---
+# name: test_entity_snapshots[sensor][sensor.123_example_st_springfield_ca_00000_unread_requests-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': dict({
+      <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+    }),
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'sensor',
+    'entity_category': None,
+    'entity_id': 'sensor.123_example_st_springfield_ca_00000_unread_requests',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Unread requests',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': 'mdi:clipboard-list',
+    'original_name': 'Unread requests',
+    'platform': 'casahome',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': 'requests_badge',
+    'unique_id': '00000000-0000-4000-8000-000000000002_requests_badge',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_entity_snapshots[sensor][sensor.123_example_st_springfield_ca_00000_unread_requests-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: '123 Example St, Springfield, CA 00000 Unread requests',
+      <EntityStateAttribute.ICON: 'icon'>: 'mdi:clipboard-list',
+      <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+    }),
+    'context': <ANY>,
+    'entity_id': 'sensor.123_example_st_springfield_ca_00000_unread_requests',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': '0',
+  })
+# ---
+# name: test_entity_snapshots[sensor][sensor.123_example_st_springfield_ca_00000_unread_total-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': dict({
+      <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+    }),
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'sensor',
+    'entity_category': None,
+    'entity_id': 'sensor.123_example_st_springfield_ca_00000_unread_total',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Unread total',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': 'mdi:bell-badge',
+    'original_name': 'Unread total',
+    'platform': 'casahome',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': 'badge_total',
+    'unique_id': '00000000-0000-4000-8000-000000000002_badge_total',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_entity_snapshots[sensor][sensor.123_example_st_springfield_ca_00000_unread_total-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: '123 Example St, Springfield, CA 00000 Unread total',
+      <EntityStateAttribute.ICON: 'icon'>: 'mdi:bell-badge',
+      <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+    }),
+    'context': <ANY>,
+    'entity_id': 'sensor.123_example_st_springfield_ca_00000_unread_total',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': '0',
+  })
+# ---
