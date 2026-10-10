@@ -72,6 +72,8 @@ def mock_auth() -> Generator[MagicMock]:
     def _factory(*args: Any, **kwargs: Any) -> MagicMock:
         captured["args"] = args
         captured["kwargs"] = kwargs
+        # Real FirebaseAuth exposes the token it holds. Echo the one we were given.
+        auth.refresh_token = args[1] if len(args) > 1 else kwargs.get("refresh_token")
         return auth
 
     with (
