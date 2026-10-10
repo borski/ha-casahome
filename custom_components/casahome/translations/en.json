@@ -79,6 +79,18 @@
             "name": "Agreement names"
           }
         }
+      },
+      "weather_temperature": {
+        "name": "Weather temperature (experimental)"
+      },
+      "weather_condition": {
+        "name": "Weather condition (experimental)"
+      },
+      "credits_available": {
+        "name": "Credits available (experimental)"
+      },
+      "handyman_hourly_rate": {
+        "name": "Handyman hourly rate (experimental)"
       }
     },
     "binary_sensor": {

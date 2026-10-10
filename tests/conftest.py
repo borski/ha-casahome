@@ -9,7 +9,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from casahome.models import Bootstrap
+from casahome.models import Bootstrap, MemberCredits, WeatherResponse
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.casahome.const import (
@@ -49,8 +49,17 @@ def mock_api() -> Generator[MagicMock]:
     api = MagicMock()
     api.bootstrap = AsyncMock(return_value=bootstrap_model())
     api.badge_counts = AsyncMock()
-    api.weather = AsyncMock()
-    api.credits_summary = AsyncMock()
+    # Real models, so an options flip to experimental never feeds MagicMocks to entities.
+    api.weather = AsyncMock(
+        return_value=WeatherResponse(
+            temperature_degrees=61.5, temperature_units="fahrenheit", condition_type="cloudy"
+        )
+    )
+    api.credits_summary = AsyncMock(
+        return_value=MemberCredits(
+            home_id=HOME_ID, total_available=3, handyman_hourly_rate_cents=8500
+        )
+    )
     api.device_id = DEVICE_ID
     with (
         patch("custom_components.casahome.CasaApi", return_value=api) as init_cls,

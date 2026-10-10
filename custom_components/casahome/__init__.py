@@ -8,8 +8,14 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import CONF_DEVICE_ID, CONF_REFRESH_TOKEN
+from .const import (
+    CONF_DEVICE_ID,
+    CONF_ENABLE_EXPERIMENTAL,
+    CONF_REFRESH_TOKEN,
+    DEFAULT_ENABLE_EXPERIMENTAL,
+)
 from .coordinator import CasaCoordinator
+from .experimental import CasaExperimentalCoordinator
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
 
@@ -40,6 +46,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: CasaConfigEntry) -> bool
     coordinator = CasaCoordinator(hass, entry, api)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
+
+    if entry.options.get(CONF_ENABLE_EXPERIMENTAL, DEFAULT_ENABLE_EXPERIMENTAL):
+        for home in coordinator.data.homes:
+            experimental = CasaExperimentalCoordinator(hass, entry, api, home.id)
+            # Plain refresh: an unverified endpoint failing must never block setup.
+            await experimental.async_refresh()
+            coordinator.experimental[home.id] = experimental
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 

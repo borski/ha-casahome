@@ -22,6 +22,7 @@ from .const import DOMAIN, REQUEST_TIMEOUT_SECONDS, UPDATE_INTERVAL
 
 if TYPE_CHECKING:
     from . import CasaConfigEntry
+    from .experimental import CasaExperimentalCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,6 +42,8 @@ class CasaCoordinator(DataUpdateCoordinator[Bootstrap]):
         )
         self.api = api
         self._schema_warned = False
+        # Per home, only populated when the experimental option is on.
+        self.experimental: dict[str, CasaExperimentalCoordinator] = {}
 
     async def _async_update_data(self) -> Bootstrap:
         try:
