@@ -1,0 +1,15 @@
+{
+  "domain": "casahome",
+  "name": "Casa",
+  "codeowners": ["@borski"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/borski/ha-casahome",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/borski/ha-casahome/issues",
+  "loggers": ["casahome"],
+  "requirements": ["python-casahome==0.1.1"],
+  "single_config_entry": true,
+  "version": "0.1.0"
+}

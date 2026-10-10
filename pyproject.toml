@@ -1,0 +1,33 @@
+# Dev tooling only. This repo isn't a Python package.
+# HA installs the integration from custom_components/casahome.
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "ASYNC"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["custom_components"]
+known-third-party = ["casahome", "homeassistant", "pytest_homeassistant_custom_component"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+plugins = ["pydantic.mypy"]
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = ["pytest_homeassistant_custom_component.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# mypy narrows entry.state across awaits that change it.
+module = ["tests.*"]
+disable_error_code = ["comparison-overlap"]

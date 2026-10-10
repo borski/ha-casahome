@@ -1,0 +1,50 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect Casa",
+        "description": "Paste your Casa refresh token. Casa signs in by SMS inside its app, so Home Assistant can't log in for you. The README explains where the token comes from.",
+        "data": {
+          "refresh_token": "Refresh token"
+        },
+        "data_description": {
+          "refresh_token": "Firebase refresh token from the Casa app. It's stored in this config entry and updated automatically when Casa rotates it."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect Casa",
+        "description": "Casa rejected the saved refresh token. Paste a new one for the same Casa account.",
+        "data": {
+          "refresh_token": "Refresh token"
+        },
+        "data_description": {
+          "refresh_token": "Firebase refresh token from the Casa app."
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Casa rejected that refresh token.",
+      "cannot_connect": "Couldn't reach Casa. Check the network and try again.",
+      "unknown": "Unexpected error. Check the Home Assistant log."
+    },
+    "abort": {
+      "already_configured": "This Casa account is already set up.",
+      "single_instance_allowed": "Casa is already set up. Only one Casa account is supported.",
+      "reauth_successful": "Casa reconnected.",
+      "wrong_account": "That token belongs to a different Casa account. Use a token for the account that was set up originally."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Casa options",
+        "data": {
+          "enable_experimental": "Poll unverified endpoints"
+        },
+        "data_description": {
+          "enable_experimental": "Poll endpoints that haven't been verified against real Casa traffic yet. They may 404."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "id": "00000000-0000-4000-8000-000000000001",
+  "email": "member@example.com",
+  "first_name": "Test",
+  "last_name": "Member",
+  "phone_number": "+15550000000",
+  "avatar_url": null,
+  "avatar_url_cache_key": null,
+  "created_at": 1778095770,
+  "calendar_sync_active": false,
+  "calendar_sync_email": null,
+  "calendar_sync_insufficient_scope": false,
+  "calendar_sync_options": [],
+  "homes": [
+    {
+      "id": "00000000-0000-4000-8000-000000000002",
+      "address_street_number": "123",
+      "address_street": "Example St",
+      "address_subpremise": null,
+      "address_city": "Springfield",
+      "address_state": "CA",
+      "address_postal_code": "00000",
+      "latitude": 37.0,
+      "longitude": -122.0,
+      "home_image_url": "https://example.com/redacted.jpg",
+      "home_image_url_cache_key": "REDACTED",
+      "payment_description": "Card ending 0000",
+      "payment_method_type": "card",
+      "payment_method_last4": "0000",
+      "payment_method_brand": "visa",
+      "card_surcharge_rate": 0.0,
+      "has_payment_method": true,
+      "membership_active": false,
+      "membership_name": null,
+      "membership_plan": null,
+      "membership_amount": null,
+      "membership_next_renewal": null,
+      "timezone": "America/Los_Angeles",
+      "is_multi_user_home": false,
+      "matterport_model_id": "FAKEMODEL00",
+      "matterport_model_password": "REDACTED",
+      "status": "onboarding",
+      "plan_state": "never_paid",
+      "route": "onboarding",
+      "past_due_until": null,
+      "scheduled_change": null,
+      "is_primary_member": true,
+      "pending_agreements": [
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "name": "Member Terms of Use",
+          "content": "Agreement text redacted for fixture size."
+        }
+      ],
+      "has_pending_post_onboarding": true,
+      "badge_counts": {
+        "computed_at": 1791614211,
+        "total": 0,
+        "features": {
+          "requests": 0,
+          "recurring_vendors": 0,
+          "mailbox": 0
+        }
+      }
+    }
+  ],
+  "waitlist_entries": [],
+  "is_casa_collective": true,
+  "user_prefs": [],
+  "app_update": {
+    "force_update_required": false,
+    "current_build": "698",
+    "min_required_build": "698",
+    "message": "We\u2019ve released important updates to Casa. Please update to the latest release from the App Store.",
+    "update_url": "https://apps.apple.com/us/app/casa-home-taken-care-of/id6504832346"
+  }
+}
