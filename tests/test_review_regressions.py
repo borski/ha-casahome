@@ -320,6 +320,98 @@ async def test_sdk_child_is_cancelled_on_dispatcher_cancellation_or_timeout(
             release.set()
 
 
+@pytest.mark.parametrize("replacement", [None, "old_finishes_first", "new_finishes_first"])
+async def test_double_cancelled_refresh_keeps_sdk_children_owned_until_unload(
+    hass: HomeAssistant,
+    config_entry: MockConfigEntry,
+    mock_api: MagicMock,
+    mock_auth: MagicMock,
+    replacement: str | None,
+) -> None:
+    await setup(hass, config_entry)
+    co = coordinator(config_entry, ReadFamily.MAIL)
+    entered = [asyncio.Event(), asyncio.Event()]
+    cleaning = [asyncio.Event(), asyncio.Event()]
+    release_cleanup = [asyncio.Event(), asyncio.Event()]
+    cleaned = [asyncio.Event(), asyncio.Event()]
+    sdk_children: list[asyncio.Task[ReadData]] = []
+
+    async def blocked_mail(home_id: str) -> MailboxMailItemsResponse:
+        assert home_id == HOME_ID
+        child = asyncio.current_task()
+        assert child is not None
+        index = len(sdk_children)
+        sdk_children.append(child)
+        entered[index].set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cleaning[index].set()
+            await release_cleanup[index].wait()
+            cleaned[index].set()
+            raise
+        return fixtures.mail()
+
+    mock_api.mail_items.side_effect = blocked_mail
+    refreshes = [
+        config_entry.async_create_background_task(
+            hass, co.async_refresh(), name="Synthetic double-cancel refresh"
+        )
+    ]
+    unload: asyncio.Task[bool] | None = None
+    try:
+        await asyncio.wait_for(entered[0].wait(), 5)
+        refreshes[0].cancel()
+        await asyncio.wait_for(cleaning[0].wait(), 5)
+        refreshes[0].cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(refreshes[0], 5)
+        assert not sdk_children[0].done() and sdk_children[0].cancelling() == 1
+
+        if replacement is not None:
+            refreshes.append(
+                config_entry.async_create_background_task(
+                    hass, co.async_refresh(), name="Synthetic replacement refresh"
+                )
+            )
+            await asyncio.wait_for(entered[1].wait(), 5)
+            assert not sdk_children[0].done() and not sdk_children[1].done()
+            if replacement == "old_finishes_first":
+                release_cleanup[0].set()
+                await asyncio.wait_for(asyncio.gather(sdk_children[0], return_exceptions=True), 5)
+                # The old completion callback mustn't clear ownership of the newer child.
+                assert co._fetch_task is sdk_children[1]
+
+        unload = asyncio.create_task(hass.config_entries.async_unload(config_entry.entry_id))
+        if replacement is not None:
+            await asyncio.wait_for(cleaning[1].wait(), 5)
+            if replacement == "new_finishes_first":
+                release_cleanup[1].set()
+                await asyncio.wait_for(asyncio.gather(sdk_children[1], return_exceptions=True), 5)
+
+        # Shield only prevents this assertion's timeout from cancelling unload.
+        # Unload must wait for SDK cleanup, even when the refresh parent has exited.
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(asyncio.shield(unload), 0.05)
+        for release in release_cleanup:
+            release.set()
+        assert await asyncio.wait_for(unload, 5)
+        assert all(child.done() and child.cancelled() for child in sdk_children)
+        assert all(event.is_set() for event in cleaned[: len(sdk_children)])
+        assert all(child.cancelling() == 1 for child in sdk_children)
+        assert not co._fetch_tasks
+        assert co._fetch_task is None and co._unsub_refresh is None
+        assert co._debounced_refresh._timer_task is None and co._unsub_main is None
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert not co._debounced_refresh._execute_lock.locked()
+    finally:
+        for release in release_cleanup:
+            release.set()
+        await asyncio.wait_for(asyncio.gather(*refreshes, *sdk_children, return_exceptions=True), 5)
+        if unload is not None:
+            await asyncio.wait_for(unload, 5)
+
+
 @pytest.mark.parametrize(
     "refs,mapped,expected",
     [

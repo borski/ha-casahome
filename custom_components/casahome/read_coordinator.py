@@ -36,7 +36,7 @@ CATALOG_INTERVAL = timedelta(hours=24)
 
 
 async def _cancel_sdk_read(task: asyncio.Task[ReadData]) -> None:
-    """Finish child cleanup without repeated cancellation or upstream error details."""
+    """Cancel once and await cleanup without forwarding waiter cancellation to the child."""
     if task.done():
         return
     if not task.cancelling():
@@ -78,6 +78,7 @@ class CasaReadCoordinator(DataUpdateCoordinator[ReadData]):
         self._started = False
         self._unsub_main: Callable[[], None] | None = None
         self._fetch_task: asyncio.Task[ReadData] | None = None
+        self._fetch_tasks: set[asyncio.Task[ReadData]] = set()
         self.inventory_listener: Callable[[], None] | None = None
         entry.async_on_unload(self._stop_home_listener)
 
@@ -165,6 +166,13 @@ class CasaReadCoordinator(DataUpdateCoordinator[ReadData]):
     def _is_current_read(self, generation: int) -> bool:
         return generation == self._generation and self._read_eligible
 
+    @callback
+    def _sdk_read_finished(self, task: asyncio.Task[ReadData]) -> None:
+        """Release ownership only when SDK cleanup has finished."""
+        self._fetch_tasks.discard(task)
+        if self._fetch_task is task:
+            self._fetch_task = None
+
     async def async_shutdown(self) -> None:
         """Cancel the SDK child itself, including reads dispatched by HA timers."""
         await super().async_shutdown()
@@ -172,10 +180,9 @@ class CasaReadCoordinator(DataUpdateCoordinator[ReadData]):
         self._generation += 1
         self.data = ReadData()
         self._stop_home_listener()
-        if (task := self._fetch_task) is not None:
-            # Await only the child, never the dispatcher holding the debounce lock.
-            # No upstream exceptions or cancellation details escape shutdown.
-            await _cancel_sdk_read(task)
+        # A cancelled dispatcher can exit while its child's cleanup is still pending.
+        # Cancel all owned children concurrently without acquiring the debounce lock.
+        await asyncio.gather(*(_cancel_sdk_read(task) for task in tuple(self._fetch_tasks)))
 
     async def _fetch_projection(self) -> ReadData:
         api = self.main_coordinator.api
@@ -213,20 +220,23 @@ class CasaReadCoordinator(DataUpdateCoordinator[ReadData]):
             async with asyncio.timeout(REQUEST_TIMEOUT_SECONDS):
                 # A debounce wrapper can finish before HA dispatches its timer.
                 # Own the actual child through async_shutdown, not its dispatcher.
-                # Shielding avoids repeated cancellation from entry task groups
-                # interrupting the SDK's cancellation cleanup.
+                # Parent cancellation mustn't cancel SDK cleanup a second time.
+                # Completion callbacks retain ownership if the parent exits early.
                 task = self.hass.async_create_background_task(
                     self._fetch_projection(), name=f"{self.name} SDK read"
                 )
                 self._fetch_task = task
+                self._fetch_tasks.add(task)
+                task.add_done_callback(self._sdk_read_finished)
                 try:
                     data = await asyncio.shield(task)
                 finally:
                     try:
                         await _cancel_sdk_read(task)
                     finally:
-                        if self._fetch_task is task:
-                            self._fetch_task = None
+                        # An eager child can finish before its callback gets a loop turn.
+                        if task.done():
+                            self._sdk_read_finished(task)
         except CasaAuthError:
             if self._is_current_read(generation):
                 # Clear cached values even when HA's coordinator keeps its previous data.
