@@ -18,6 +18,8 @@ from casahome.models import (
     WeatherResponse,
 )
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.syrupy import HomeAssistantSnapshotExtension
+from syrupy.assertion import SnapshotAssertion
 
 from custom_components.casahome.const import CONF_DEVICE_ID, CONF_REFRESH_TOKEN, DOMAIN
 
@@ -141,3 +143,9 @@ def config_entry() -> MockConfigEntry:
         data={CONF_REFRESH_TOKEN: REFRESH_TOKEN, CONF_DEVICE_ID: DEVICE_ID},
         minor_version=2,
     )
+
+
+@pytest.fixture
+def snapshot(snapshot: SnapshotAssertion) -> SnapshotAssertion:
+    """Pin Home Assistant's snapshot format regardless of plugin load order."""
+    return snapshot.use_extension(HomeAssistantSnapshotExtension)
