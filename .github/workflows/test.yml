@@ -14,14 +14,11 @@ jobs:
       - uses: "actions/setup-python@v5"
         with:
           python-version: "3.14"
-      # The SDK isn't on PyPI yet. This install needs borski/python-casahome to be
-      # public with a v0.1.1 tag, or a deploy key. Until then this job is expected red
-      # and local test runs are the gate.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements_test.txt
-          pip install "git+https://github.com/borski/python-casahome.git@v0.1.1"
+          pip install "git+https://github.com/borski/python-casahome.git@v0.2.0"
       - name: Ruff
         run: |
           ruff check .

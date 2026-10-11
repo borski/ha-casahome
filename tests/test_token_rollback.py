@@ -18,7 +18,14 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.casahome.const import CONF_DEVICE_ID, CONF_REFRESH_TOKEN
 
-from .conftest import DEVICE_ID, REFRESH_TOKEN, USER_ID, bootstrap_model
+from .conftest import (
+    DEVICE_ID,
+    REFRESH_TOKEN,
+    USER_ID,
+    bootstrap_model,
+    member_credits,
+    weather_response,
+)
 
 ROTATED_TOKEN = "synthetic-rollback-rotated-token"
 LATE_TOKEN = "synthetic-rollback-late-token"
@@ -45,7 +52,7 @@ def _respond_with_token(session: MagicMock, token: str) -> None:
 
 @pytest.fixture
 def offline_sdk(caplog: pytest.LogCaptureFixture) -> Generator[MagicMock]:
-    """Keep real CasaApi, CasaClient and FirebaseAuth, mocking only HTTP and bootstrap."""
+    """Keep real CasaApi, CasaClient and FirebaseAuth, mocking only HTTP and the reads."""
     caplog.set_level(logging.DEBUG)
     session = MagicMock(spec=aiohttp.ClientSession)
     session.request.side_effect = AssertionError("Unexpected Casa HTTP request")
@@ -58,6 +65,9 @@ def offline_sdk(caplog: pytest.LogCaptureFixture) -> Generator[MagicMock]:
     with (
         patch("custom_components.casahome.async_get_clientsession", return_value=session),
         patch.object(CasaApi, "bootstrap", new=AsyncMock(return_value=bootstrap_model())),
+        # Setup probes these per home. Mocked like bootstrap, so no extra token refresh.
+        patch.object(CasaApi, "weather", new=AsyncMock(return_value=weather_response())),
+        patch.object(CasaApi, "credits_summary", new=AsyncMock(return_value=member_credits())),
     ):
         yield session
     session.request.assert_not_called()

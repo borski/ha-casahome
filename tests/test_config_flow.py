@@ -1,4 +1,4 @@
-"""Config, reauth and options flows."""
+"""Config and reauth flows."""
 
 from __future__ import annotations
 
@@ -12,12 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.casahome.const import (
-    CONF_DEVICE_ID,
-    CONF_ENABLE_EXPERIMENTAL,
-    CONF_REFRESH_TOKEN,
-    DOMAIN,
-)
+from custom_components.casahome.const import CONF_DEVICE_ID, CONF_REFRESH_TOKEN, DOMAIN
 
 from .conftest import DEVICE_ID, REFRESH_TOKEN, USER_ID, bootstrap_model
 
@@ -42,12 +37,13 @@ async def test_user_happy_path(
     await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["title"] == "Test"  # redacted fixture first_name
+    assert result["title"] == "Test"  # synthetic fixture first_name
     assert result["result"].unique_id == USER_ID
     assert result["data"][CONF_REFRESH_TOKEN] == REFRESH_TOKEN
     device_id = result["data"][CONF_DEVICE_ID]
     assert str(uuid.UUID(device_id)).upper() == device_id
-    assert result["options"] == {CONF_ENABLE_EXPERIMENTAL: False}
+    assert result["options"] == {}
+    assert result["result"].minor_version == 2  # new entries never need migration
     # The flow's bootstrap and setup's bootstrap must share one device id.
     assert mock_api.flow_cls.call_args.kwargs["device_id"] == device_id
     assert mock_api.init_cls.call_args.kwargs["device_id"] == device_id
@@ -56,11 +52,13 @@ async def test_user_happy_path(
 async def test_user_stores_rotated_token(
     hass: HomeAssistant, mock_api: MagicMock, mock_auth: MagicMock
 ) -> None:
-    async def _rotate() -> object:
+    async def _rotate() -> str:
+        mock_auth.user_id = USER_ID
         mock_auth.refresh_token = NEW_TOKEN
-        return bootstrap_model()
+        mock_auth.captured["kwargs"]["on_refresh_token_rotated"](NEW_TOKEN)
+        return "fake-id-token"
 
-    mock_api.bootstrap.side_effect = _rotate
+    mock_auth.get_id_token.side_effect = _rotate
     flow_id = await _start(hass)
     result = await hass.config_entries.flow.async_configure(
         flow_id, {CONF_REFRESH_TOKEN: REFRESH_TOKEN}
@@ -135,12 +133,13 @@ async def test_unknown_error_logs_class_only(
 async def test_missing_user_id_is_invalid_auth(
     hass: HomeAssistant, mock_api: MagicMock, mock_auth: MagicMock
 ) -> None:
-    mock_auth.user_id = None
+    mock_auth.get_id_token.side_effect = None
     flow_id = await _start(hass)
     result = await hass.config_entries.flow.async_configure(
         flow_id, {CONF_REFRESH_TOKEN: REFRESH_TOKEN}
     )
     assert result["errors"] == {"base": "invalid_auth"}
+    mock_api.bootstrap.assert_not_awaited()
 
 
 async def test_single_instance(
@@ -213,13 +212,29 @@ async def test_reauth_wrong_account(
 ) -> None:
     await _loaded(hass, config_entry)
     result = await config_entry.start_reauth_flow(hass)
-    mock_auth.user_id = "someone-else"
+
+    async def _authenticate_wrong_account() -> str:
+        mock_auth.user_id = "someone-else"
+        mock_auth.refresh_token = "fake-wrong-account-rotated"
+        mock_auth.captured["kwargs"]["on_refresh_token_rotated"](mock_auth.refresh_token)
+        return "fake-id-token"
+
+    mock_auth.get_id_token.side_effect = _authenticate_wrong_account
+    mock_api.bootstrap.reset_mock()
+    mock_api.flow_cls.reset_mock()
+    original_data = dict(config_entry.data)
+    runtime_auth_calls = mock_auth.init_cls.call_count
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_REFRESH_TOKEN: NEW_TOKEN}
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "wrong_account"
-    assert config_entry.data[CONF_REFRESH_TOKEN] == REFRESH_TOKEN
+    await hass.async_block_till_done()
+    assert dict(config_entry.data) == original_data
+    mock_api.bootstrap.assert_not_awaited()
+    mock_api.flow_cls.assert_not_called()
+    assert mock_auth.init_cls.call_count == runtime_auth_calls
+    assert hass.config_entries.async_entries(DOMAIN) == [config_entry]
 
 
 async def test_reauth_error_shows_form(
@@ -238,26 +253,14 @@ async def test_reauth_error_shows_form(
     assert result["errors"] == {"base": "invalid_auth"}
 
 
-async def test_options_toggle_reloads(
+async def test_no_options_flow(
     hass: HomeAssistant,
     config_entry: MockConfigEntry,
     mock_api: MagicMock,
     mock_auth: MagicMock,
 ) -> None:
     await _loaded(hass, config_entry)
-    calls_before = mock_api.init_cls.call_count
-
-    result = await hass.config_entries.options.async_init(config_entry.entry_id)
-    assert result["type"] is FlowResultType.FORM
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_ENABLE_EXPERIMENTAL: True}
-    )
-    await hass.async_block_till_done()
-
-    assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert config_entry.options[CONF_ENABLE_EXPERIMENTAL] is True
-    assert mock_api.init_cls.call_count == calls_before + 1
-    assert config_entry.state is ConfigEntryState.LOADED
+    assert not config_entry.supports_options
 
 
 async def test_token_rotation_does_not_reload(

@@ -9,9 +9,9 @@ DOMAIN: Final = "casahome"
 
 CONF_REFRESH_TOKEN: Final = "refresh_token"
 CONF_DEVICE_ID: Final = "device_id"
-CONF_ENABLE_EXPERIMENTAL: Final = "enable_experimental"
 
-DEFAULT_ENABLE_EXPERIMENTAL: Final = False
+# Removed in config entry minor version 2. Kept only so migration can drop it.
+LEGACY_CONF_ENABLE_EXPERIMENTAL: Final = "enable_experimental"
 
 # Bootstrap is about 92 KB. Every 15 minutes is polite.
 UPDATE_INTERVAL: Final = timedelta(minutes=15)

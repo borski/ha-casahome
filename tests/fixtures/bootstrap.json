@@ -6,7 +6,7 @@
   "phone_number": "+15550000000",
   "avatar_url": null,
   "avatar_url_cache_key": null,
-  "created_at": 1778095770,
+  "created_at": 1700000000,
   "calendar_sync_active": false,
   "calendar_sync_email": null,
   "calendar_sync_insufficient_scope": false,
@@ -22,7 +22,7 @@
       "address_postal_code": "00000",
       "latitude": 37.0,
       "longitude": -122.0,
-      "home_image_url": "https://example.com/redacted.jpg",
+      "home_image_url": "https://example.com/home.jpg",
       "home_image_url_cache_key": "REDACTED",
       "payment_description": "Card ending 0000",
       "payment_method_type": "card",
@@ -39,9 +39,9 @@
       "is_multi_user_home": false,
       "matterport_model_id": "FAKEMODEL00",
       "matterport_model_password": "REDACTED",
-      "status": "onboarding",
-      "plan_state": "never_paid",
-      "route": "onboarding",
+      "status": "active",
+      "plan_state": "active",
+      "route": "home",
       "past_due_until": null,
       "scheduled_change": null,
       "is_primary_member": true,
@@ -49,12 +49,12 @@
         {
           "id": "00000000-0000-4000-8000-000000000003",
           "name": "Member Terms of Use",
-          "content": "Agreement text redacted for fixture size."
+          "content": "Synthetic agreement text."
         }
       ],
       "has_pending_post_onboarding": true,
       "badge_counts": {
-        "computed_at": 1791614211,
+        "computed_at": 1700000100,
         "total": 0,
         "features": {
           "requests": 0,

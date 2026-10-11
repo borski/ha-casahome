@@ -1,4 +1,4 @@
-"""Entities, devices, diagnostics, and the never-expose list. All from the redacted fixture."""
+"""Entities, devices, diagnostics, and the never-expose list. All from the synthetic fixture."""
 
 from __future__ import annotations
 
@@ -91,16 +91,20 @@ async def test_entity_counts_and_states(hass: HomeAssistant, config_entry: MockC
     await _setup(hass, config_entry)
     registry = er.async_get(hass)
     entries = er.async_entries_for_config_entry(registry, config_entry.entry_id)
-    assert len([e for e in entries if e.domain == "sensor"]) == 7
+    # 7 from bootstrap plus weather and credits, all enabled by default.
+    assert len([e for e in entries if e.domain == "sensor"]) == 11
     assert len([e for e in entries if e.domain == "binary_sensor"]) == 6
     assert {e.unique_id for e in entries} >= {f"{HOME_ID}_status", f"{HOME_ID}_mailbox_badge"}
 
-    assert _state(hass, f"{SENSOR}_status").state == "onboarding"
-    assert _state(hass, f"{SENSOR}_plan_state").state == "never_paid"
+    assert _state(hass, f"{SENSOR}_status").state == "active"
+    assert _state(hass, f"{SENSOR}_plan_state").state == "active"
     assert _state(hass, f"{SENSOR}_unread_mail").state == "0"
     pending = _state(hass, f"{SENSOR}_pending_agreements")
     assert pending.state == "1"
     assert pending.attributes["names"] == ["Member Terms of Use"]
+    assert _state(hass, f"{SENSOR}_weather_condition").state == "clear"
+    assert _state(hass, f"{SENSOR}_credits_available").state == "3"
+    assert float(_state(hass, f"{SENSOR}_handyman_hourly_rate").state) == 85.0
     assert _state(hass, f"{BINARY}_agreement_needs_signature").state == "on"
     assert _state(hass, f"{BINARY}_membership_active").state == "off"
     assert _state(hass, f"{BINARY}_calendar_sync").state == "off"
@@ -171,7 +175,7 @@ async def test_missing_badge_counts_makes_badges_unavailable(
     await _setup(hass, config_entry)
     for key in ("unread_requests", "unread_recurring_vendors", "unread_mail", "unread_total"):
         assert _state(hass, f"{SENSOR}_{key}").state == STATE_UNAVAILABLE
-    assert _state(hass, f"{SENSOR}_status").state == "onboarding"
+    assert _state(hass, f"{SENSOR}_status").state == "active"
 
 
 async def test_calendar_sync_none_is_unavailable(
@@ -231,7 +235,7 @@ async def test_diagnostics_redacted(
     for value in ("123", "Example St", "Springfield", "00000", "visa", "0000"):
         assert f'"{value}"' not in dumped, value
     home = diagnostics["bootstrap"]["homes"][0]
-    assert home["status"] == "onboarding"
+    assert home["status"] == "active"
     assert home["pending_agreements"][0]["name"] == "Member Terms of Use"
     assert home["pending_agreements"][0]["content"] == "**REDACTED**"
     assert diagnostics["entry"]["data"]["refresh_token"] == "**REDACTED**"

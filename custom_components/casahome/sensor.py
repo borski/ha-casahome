@@ -1,4 +1,4 @@
-"""Casa sensors. Every value here comes from the verified bootstrap response."""
+"""Casa sensors. Per-home values from bootstrap, plus weather and credits."""
 
 from __future__ import annotations
 
@@ -21,13 +21,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import CasaConfigEntry
 from .entity import CasaHomeEntity, home_device_info
-from .experimental import (
-    CREDITS,
-    WEATHER,
-    CasaExperimentalCoordinator,
-    ExperimentalData,
-    ExperimentalEndpoint,
-)
+from .home_coordinator import CREDITS, WEATHER, CasaHomeCoordinator, HomeData, HomeEndpoint
 
 PARALLEL_UPDATES = 0
 
@@ -121,8 +115,9 @@ SENSORS: tuple[CasaSensorEntityDescription, ...] = (
 )
 
 
-def _temperature_unit(data: ExperimentalData) -> str | None:
-    # temperature_units is a free string upstream. Its values were never observed.
+def _temperature_unit(data: HomeData) -> str | None:
+    # temperature_units is a free string upstream. Casa sends "F". The other
+    # spellings are accepted defensively.
     units = (data.weather.temperature_units if data.weather else "").strip().lower()
     if units in ("f", "fahrenheit", "°f", "imperial"):
         return UnitOfTemperature.FAHRENHEIT
@@ -131,30 +126,33 @@ def _temperature_unit(data: ExperimentalData) -> str | None:
     return None
 
 
-def _condition(data: ExperimentalData) -> str | None:
+def _condition(data: HomeData) -> str | None:
     if data.weather is None:
         return None
     return str(getattr(data.weather.condition_type, "value", data.weather.condition_type))
 
 
-def _temperature(data: ExperimentalData) -> float | None:
+def _temperature(data: HomeData) -> float | None:
     if data.weather is None or not isfinite(data.weather.temperature_degrees):
         return None
     return data.weather.temperature_degrees
 
 
 @dataclass(frozen=True, kw_only=True)
-class CasaExperimentalSensorEntityDescription(SensorEntityDescription):
-    """Sensor over an unverified endpoint. Off by default, behind the option gate too."""
+class CasaHomeDataSensorEntityDescription(SensorEntityDescription):
+    """Sensor over the per-home weather or credits endpoint.
 
-    value_fn: Callable[[ExperimentalData], Any]
-    endpoint: ExperimentalEndpoint
-    unit_fn: Callable[[ExperimentalData], str | None] | None = None
-    entity_registry_enabled_default: bool = False
+    ``endpoint`` doubles as the coordinator context, so only families with an
+    enabled entity get polled.
+    """
+
+    value_fn: Callable[[HomeData], Any]
+    endpoint: HomeEndpoint
+    unit_fn: Callable[[HomeData], str | None] | None = None
 
 
-EXPERIMENTAL_SENSORS: tuple[CasaExperimentalSensorEntityDescription, ...] = (
-    CasaExperimentalSensorEntityDescription(
+HOME_DATA_SENSORS: tuple[CasaHomeDataSensorEntityDescription, ...] = (
+    CasaHomeDataSensorEntityDescription(
         key="weather_temperature",
         endpoint=WEATHER,
         translation_key="weather_temperature",
@@ -163,14 +161,14 @@ EXPERIMENTAL_SENSORS: tuple[CasaExperimentalSensorEntityDescription, ...] = (
         value_fn=_temperature,
         unit_fn=_temperature_unit,
     ),
-    CasaExperimentalSensorEntityDescription(
+    CasaHomeDataSensorEntityDescription(
         key="weather_condition",
         endpoint=WEATHER,
         translation_key="weather_condition",
         icon="mdi:weather-partly-cloudy",
         value_fn=_condition,
     ),
-    CasaExperimentalSensorEntityDescription(
+    CasaHomeDataSensorEntityDescription(
         key="credits_available",
         endpoint=CREDITS,
         translation_key="credits_available",
@@ -178,12 +176,14 @@ EXPERIMENTAL_SENSORS: tuple[CasaExperimentalSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda d: d.credits.total_available if d.credits else None,
     ),
-    CasaExperimentalSensorEntityDescription(
+    CasaHomeDataSensorEntityDescription(
         key="handyman_hourly_rate",
         endpoint=CREDITS,
         translation_key="handyman_hourly_rate",
         device_class=SensorDeviceClass.MONETARY,
-        # Field is named *_cents. Casa is US only, so USD is an assumption, not observed.
+        # A plan price, not a live measurement, so it sits with plan_state as diagnostic.
+        entity_category=EntityCategory.DIAGNOSTIC,
+        # Field is named *_cents. Casa is US only, so USD is an assumption.
         native_unit_of_measurement="USD",
         suggested_display_precision=2,
         value_fn=lambda d: d.credits.handyman_hourly_rate_cents / 100 if d.credits else None,
@@ -203,12 +203,11 @@ async def async_setup_entry(
         for home in coordinator.data.homes
         for description in SENSORS
     )
-    # Empty unless the experimental option is on.
     async_add_entities(
-        CasaExperimentalSensor(experimental, home, description)
+        CasaHomeDataSensor(home_coordinator, home, description)
         for home in coordinator.data.homes
-        if (experimental := coordinator.experimental.get(home.id)) is not None
-        for description in EXPERIMENTAL_SENSORS
+        if (home_coordinator := coordinator.home_coordinators.get(home.id)) is not None
+        for description in HOME_DATA_SENSORS
     )
 
 
@@ -241,17 +240,17 @@ class CasaSensor(CasaHomeEntity, SensorEntity):
         return self.entity_description.attrs_fn(home, self.coordinator.data)
 
 
-class CasaExperimentalSensor(CoordinatorEntity[CasaExperimentalCoordinator], SensorEntity):
-    """A sensor fed by an unverified Casa endpoint."""
+class CasaHomeDataSensor(CoordinatorEntity[CasaHomeCoordinator], SensorEntity):
+    """A sensor fed by the per-home weather or credits endpoint."""
 
     _attr_has_entity_name = True
-    entity_description: CasaExperimentalSensorEntityDescription
+    entity_description: CasaHomeDataSensorEntityDescription
 
     def __init__(
         self,
-        coordinator: CasaExperimentalCoordinator,
+        coordinator: CasaHomeCoordinator,
         home: MemberSimpleHome,
-        description: CasaExperimentalSensorEntityDescription,
+        description: CasaHomeDataSensorEntityDescription,
     ) -> None:
         super().__init__(coordinator, context=description.endpoint)
         self.entity_description = description
@@ -259,7 +258,7 @@ class CasaExperimentalSensor(CoordinatorEntity[CasaExperimentalCoordinator], Sen
         self._attr_device_info = home_device_info(home)
 
     async def async_added_to_hass(self) -> None:
-        """Listen to bootstrap as well as experimental endpoint updates."""
+        """Listen to bootstrap as well as weather and credits updates."""
         await super().async_added_to_hass()
         self.async_on_remove(
             self.coordinator.main_coordinator.async_add_listener(

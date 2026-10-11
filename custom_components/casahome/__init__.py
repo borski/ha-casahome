@@ -6,25 +6,31 @@ from casahome import CasaApi, CasaClient, FirebaseAuth
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import (
-    CONF_DEVICE_ID,
-    CONF_ENABLE_EXPERIMENTAL,
-    CONF_REFRESH_TOKEN,
-    DEFAULT_ENABLE_EXPERIMENTAL,
-)
+from .const import CONF_DEVICE_ID, CONF_REFRESH_TOKEN, LEGACY_CONF_ENABLE_EXPERIMENTAL
 from .coordinator import CasaCoordinator
-from .experimental import CasaExperimentalCoordinator
+from .home_coordinator import CasaHomeCoordinator
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
+PLATFORMS: list[Platform] = [
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
+    Platform.TODO,
+    Platform.CALENDAR,
+]
+
+# Sensors that sat behind the experimental option before minor version 2.
+# Frozen history for migration, not the live sensor list.
+_PROMOTED_SENSOR_KEYS = frozenset(
+    {"weather_temperature", "weather_condition", "credits_available", "handyman_hourly_rate"}
+)
 
 type CasaConfigEntry = ConfigEntry[CasaCoordinator]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: CasaConfigEntry) -> bool:
     """Set up Casa from a config entry."""
-    loaded_options = dict(entry.options)
     persisted_token = entry.data[CONF_REFRESH_TOKEN]
     coordinator: CasaCoordinator | None = None
 
@@ -76,30 +82,47 @@ async def async_setup_entry(hass: HomeAssistant, entry: CasaConfigEntry) -> bool
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
 
-    if loaded_options.get(CONF_ENABLE_EXPERIMENTAL, DEFAULT_ENABLE_EXPERIMENTAL):
-        for home in coordinator.data.homes:
-            experimental = CasaExperimentalCoordinator(hass, entry, api, home.id, coordinator)
-            # Plain refresh: an unverified endpoint failing must never block setup.
-            await experimental.async_refresh()
-            coordinator.experimental[home.id] = experimental
+    for home in coordinator.data.homes:
+        home_coordinator = CasaHomeCoordinator(hass, entry, api, home.id, coordinator)
+        # Existing sensor unit setup needs the weather/credits probe before add.
+        await home_coordinator.async_refresh()
+        coordinator.home_coordinators[home.id] = home_coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    # Entities have registered their contexts now. New read families never probe
+    # disabled entities. Keep the historical weather/credits setup probe.
+    for home_coordinator in coordinator.home_coordinators.values():
+        # Plain refresh: per-home failures must never block bootstrap setup.
+        await home_coordinator.async_refresh_new_platforms()
+    return True
 
-    # Update listeners fire on every entry update, including token rotation.
-    # Only an options change should reload.
 
-    async def _async_reload_on_options_change(
-        hass: HomeAssistant, updated: CasaConfigEntry
-    ) -> None:
-        if dict(updated.options) != loaded_options:
-            await hass.config_entries.async_reload(updated.entry_id)
+def _is_promoted_sensor(unique_id: str) -> bool:
+    """Unique ids are ``{home_id}_{key}``."""
+    return any(unique_id.endswith(f"_{key}") for key in _PROMOTED_SENSOR_KEYS)
 
-    entry.async_on_unload(entry.add_update_listener(_async_reload_on_options_change))
-    if dict(entry.options) != loaded_options:
-        hass.async_create_task(
-            hass.config_entries.async_reload(entry.entry_id),
-            name="Casa options changed during setup",
-        )
+
+async def async_migrate_entry(hass: HomeAssistant, entry: CasaConfigEntry) -> bool:
+    """Migrate older config entries. 1.1 to 1.2 drops the experimental option."""
+    if entry.version > 1:
+        # Downgrade from a future version. Refuse rather than guess.
+        return False
+    if entry.minor_version < 2:
+        registry = er.async_get(hass)
+        for registered in er.async_entries_for_config_entry(registry, entry.entry_id):
+            # Only undo the integration's old default. Respect anything a user disabled.
+            if (
+                registered.domain == Platform.SENSOR
+                and registered.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+                and _is_promoted_sensor(registered.unique_id)
+            ):
+                registry.async_update_entity(registered.entity_id, disabled_by=None)
+        options = {
+            key: value
+            for key, value in entry.options.items()
+            if key != LEGACY_CONF_ENABLE_EXPERIMENTAL
+        }
+        hass.config_entries.async_update_entry(entry, options=options, minor_version=2)
     return True
 
 

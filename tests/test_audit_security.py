@@ -16,31 +16,23 @@ from homeassistant.config_entries import SOURCE_REAUTH, SOURCE_USER, ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.casahome.const import (
     CONF_DEVICE_ID,
-    CONF_ENABLE_EXPERIMENTAL,
     CONF_REFRESH_TOKEN,
     DOMAIN,
 )
 from custom_components.casahome.diagnostics import async_get_config_entry_diagnostics
 
-from .conftest import DEVICE_ID, HOME_ID, REFRESH_TOKEN, bootstrap_model
+from .conftest import DEVICE_ID, REFRESH_TOKEN, bootstrap_model
 
 SENSITIVE_MARKER = "synthetic-audit-private-marker-not-a-real-credential"
 ROTATED_TOKEN = "synthetic-audit-rotated-token"
 REAUTH_TOKEN = "synthetic-audit-reauth-token"
 STALE_TOKEN = "synthetic-audit-stale-token"
 ERROR_KINDS = ("auth", "connection", "timeout", "schema", "api")
-EXPERIMENTAL_KEYS = (
-    "weather_temperature",
-    "weather_condition",
-    "credits_available",
-    "handyman_hourly_rate",
-)
 
 
 def _error(kind: str) -> Exception:
@@ -322,118 +314,3 @@ async def test_rotation_guard_covers_platform_unload_in_progress(
     callback(ROTATED_TOKEN)
     assert config_entry.data[CONF_REFRESH_TOKEN] == (REFRESH_TOKEN if unloaded else ROTATED_TOKEN)
     await hass.async_block_till_done()
-
-
-async def _set_options(hass: HomeAssistant, entry: MockConfigEntry, enabled: bool) -> None:
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert result["type"] is FlowResultType.FORM
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_ENABLE_EXPERIMENTAL: enabled}
-    )
-    assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert entry.options[CONF_ENABLE_EXPERIMENTAL] is enabled
-
-
-@pytest.mark.parametrize(
-    ("stage", "initial_enabled"),
-    [
-        ("bootstrap", False),
-        ("bootstrap", True),
-        ("experimental_weather", True),
-        ("experimental_credits", True),
-        ("forwarding", False),
-        ("forwarding", True),
-    ],
-)
-async def test_options_changed_during_setup_reconcile_active_configuration(
-    hass: HomeAssistant,
-    config_entry: MockConfigEntry,
-    mock_api: MagicMock,
-    mock_auth: MagicMock,
-    stage: str,
-    initial_enabled: bool,
-) -> None:
-    config_entry.add_to_hass(hass)
-    hass.config_entries.async_update_entry(
-        config_entry, options={CONF_ENABLE_EXPERIMENTAL: initial_enabled}
-    )
-    entered = asyncio.Event()
-    release = asyncio.Event()
-    blocked = False
-    forwarded_options: list[bool] = []
-
-    async def pause_once() -> None:
-        nonlocal blocked
-        if not blocked:
-            blocked = True
-            entered.set()
-            await release.wait()
-
-    async def bootstrap() -> Any:
-        if stage == "bootstrap":
-            await pause_once()
-        return bootstrap_model()
-
-    weather_result = mock_api.weather.return_value
-
-    async def weather(home_id: str) -> Any:
-        assert home_id == HOME_ID
-        if stage == "experimental_weather":
-            await pause_once()
-        return weather_result
-
-    credits_result = mock_api.credits_summary.return_value
-
-    async def credits(home_id: str) -> Any:
-        assert home_id == HOME_ID
-        if stage == "experimental_credits":
-            await pause_once()
-        return credits_result
-
-    mock_api.bootstrap.side_effect = bootstrap
-    mock_api.weather.side_effect = weather
-    mock_api.credits_summary.side_effect = credits
-    original_forward = hass.config_entries.async_forward_entry_setups
-
-    async def forward(entry: Any, platforms: Any) -> None:
-        forwarded_options.append(bool(entry.runtime_data.experimental))
-        if stage == "forwarding":
-            await pause_once()
-        await original_forward(entry, platforms)
-
-    final_enabled = not initial_enabled
-    with patch.object(hass.config_entries, "async_forward_entry_setups", side_effect=forward):
-        setup_task = hass.async_create_task(hass.config_entries.async_setup(config_entry.entry_id))
-        try:
-            await asyncio.wait_for(entered.wait(), timeout=5)
-            assert config_entry.state is ConfigEntryState.SETUP_IN_PROGRESS
-            # Use the real HA options flow while setup is paused before listener registration.
-            await _set_options(hass, config_entry, final_enabled)
-        finally:
-            release.set()
-            assert await asyncio.wait_for(setup_task, timeout=10)
-            await hass.async_block_till_done()
-
-    assert config_entry.state is ConfigEntryState.LOADED
-    assert config_entry.options[CONF_ENABLE_EXPERIMENTAL] is final_enabled
-    assert bool(config_entry.runtime_data.experimental) is final_enabled
-    assert forwarded_options == [initial_enabled, final_enabled]
-    assert mock_api.init_cls.call_count == 2
-    if final_enabled:
-        registry = er.async_get(hass)
-        for key in EXPERIMENTAL_KEYS:
-            entity_id = registry.async_get_entity_id("sensor", DOMAIN, f"{HOME_ID}_{key}")
-            assert entity_id is not None
-            registered = registry.async_get(entity_id)
-            assert registered is not None
-            assert registered.disabled_by is er.RegistryEntryDisabler.INTEGRATION
-        mock_api.weather.assert_awaited_with(HOME_ID)
-        mock_api.credits_summary.assert_awaited_with(HOME_ID)
-    mock_api.badge_counts.assert_not_called()
-
-    # The reconciled setup must still install a working listener for later options changes.
-    await _set_options(hass, config_entry, initial_enabled)
-    await hass.async_block_till_done()
-    assert config_entry.state is ConfigEntryState.LOADED
-    assert bool(config_entry.runtime_data.experimental) is initial_enabled
-    assert mock_api.init_cls.call_count == 3

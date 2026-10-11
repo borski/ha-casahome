@@ -1,4 +1,4 @@
-"""Coordinator that polls Casa's bootstrap endpoint, the only VERIFIED read."""
+"""Coordinator that polls Casa's account-wide bootstrap endpoint."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from .const import DOMAIN, REQUEST_TIMEOUT_SECONDS, UPDATE_INTERVAL
 
 if TYPE_CHECKING:
     from . import CasaConfigEntry
-    from .experimental import CasaExperimentalCoordinator
+    from .home_coordinator import CasaHomeCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,8 +52,8 @@ class CasaCoordinator(DataUpdateCoordinator[Bootstrap]):
         self._schema_warned = False
         self.token_persistence_active = True
         self._resume_token_persistence = resume_token_persistence
-        # Per home, only populated when the experimental option is on.
-        self.experimental: dict[str, CasaExperimentalCoordinator] = {}
+        # Context-driven reads, one coordinator per home in the first bootstrap.
+        self.home_coordinators: dict[str, CasaHomeCoordinator] = {}
 
     @callback
     def async_resume_token_persistence(self) -> None:

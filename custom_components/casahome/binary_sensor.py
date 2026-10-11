@@ -1,4 +1,4 @@
-"""Casa binary sensors. Every value here comes from the verified bootstrap response."""
+"""Casa binary sensors. Every value here comes from the bootstrap response."""
 
 from __future__ import annotations
 

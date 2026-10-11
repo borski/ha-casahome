@@ -34,19 +34,6 @@
       "wrong_account": "That token belongs to a different Casa account. Use a token for the account that was set up originally."
     }
   },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Casa options",
-        "data": {
-          "enable_experimental": "Poll unverified endpoints"
-        },
-        "data_description": {
-          "enable_experimental": "Poll endpoints that haven't been verified against real Casa traffic yet. They may 404."
-        }
-      }
-    }
-  },
   "entity": {
     "sensor": {
       "status": {
@@ -81,16 +68,26 @@
         }
       },
       "weather_temperature": {
-        "name": "Weather temperature (experimental)"
+        "name": "Weather temperature"
       },
       "weather_condition": {
-        "name": "Weather condition (experimental)"
+        "name": "Weather condition"
       },
       "credits_available": {
-        "name": "Credits available (experimental)"
+        "name": "Credits available"
       },
       "handyman_hourly_rate": {
-        "name": "Handyman hourly rate (experimental)"
+        "name": "Handyman hourly rate"
+      }
+    },
+    "todo": {
+      "suggested_todos": {
+        "name": "Suggested tasks"
+      }
+    },
+    "calendar": {
+      "onboarding_visits": {
+        "name": "Onboarding visits"
       }
     },
     "binary_sensor": {

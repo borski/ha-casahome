@@ -3,8 +3,6 @@ name: Validate
 on:
   push:
   pull_request:
-  schedule:
-    - cron: "0 0 * * *"
   workflow_dispatch:
 
 jobs:
@@ -18,7 +16,7 @@ jobs:
         with:
           category: "integration"
 
-  # Expected to fail until python-casahome==0.1.1 is installable from PyPI.
+  # Hassfest may flag python-casahome because it isn't on PyPI yet.
   validate-hassfest:
     name: "Hassfest Validation"
     runs-on: "ubuntu-latest"
