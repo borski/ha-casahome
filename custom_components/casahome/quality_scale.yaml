@@ -9,8 +9,8 @@ rules:
   config-flow-test-coverage: done
   config-flow: done
   dependency-transparency:
-    status: exempt
-    comment: python-casahome isn't published to PyPI yet. The source lives at github.com/borski/python-casahome.
+    status: todo
+    comment: python-casahome 0.2.0 is published on PyPI. Dependency-transparency compliance hasn't been reviewed.
   docs-actions:
     status: exempt
     comment: The integration registers no actions.

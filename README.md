@@ -16,7 +16,7 @@ Alpha. Casa has no public API, so endpoints and response shapes can change witho
 - A Casa account.
 - A Casa refresh token. See [Getting a refresh token](#getting-a-refresh-token).
 
-The integration depends on [python-casahome](https://github.com/borski/python-casahome) 0.2.0. It isn't on PyPI yet, so Home Assistant installs it from the GitHub tag. Your Home Assistant install needs outbound access to GitHub for that.
+Home Assistant installs [python-casahome 0.2.0](https://pypi.org/project/python-casahome/0.2.0/) from PyPI. The dependency is pinned to that version.
 
 ## Installation
 
@@ -119,7 +119,6 @@ Task titles and visit times are visible to any Home Assistant user who can see t
 ## Known limitations
 
 - Unofficial. Casa can change or block its API at any time.
-- python-casahome isn't on PyPI yet. Home Assistant installs it from GitHub.
 - The handyman rate assumes USD.
 - New homes appear after a reload. Removed homes go unavailable, and their device stays until you delete it.
 - Suggested tasks only map one known status.
@@ -135,7 +134,7 @@ Go to Settings, then Devices and services, then **Casa**, then the menu, then De
 
 ```bash
 uv venv --python 3.14
-uv pip install -p .venv/bin/python -r requirements_test.txt -e ../python-casahome  # assumes a sibling clone of python-casahome
+uv pip install -p .venv/bin/python -r requirements_test.txt "python-casahome==0.2.0"
 .venv/bin/pytest -q
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 .venv/bin/mypy custom_components tests
