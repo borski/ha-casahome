@@ -10,7 +10,7 @@ Each Casa home becomes a device with membership, badge, weather, credit, invento
 
 Alpha. Casa has no public API, so endpoints and response shapes can change without notice. Expect breaking changes until 1.0.
 
-The local manifest is 0.3.0, a release candidate for the five-family expansion. This doesn't indicate a published release or deployment. The SDK pin remains PyPI 0.2.0.
+Version 0.3.0 expands inventory, request attention, maintenance, mail/packages, and service calendars. The SDK pin remains PyPI 0.2.0. See the [releases](https://github.com/borski/ha-casahome/releases) for installable versions.
 
 ## Requirements
 
@@ -26,11 +26,15 @@ Home Assistant installs [python-casahome 0.2.0](https://pypi.org/project/python-
 
 1. Open HACS and go to the menu, then Custom repositories.
 2. Add `https://github.com/borski/ha-casahome` with category Integration.
-3. Install **Casa** and restart Home Assistant.
+3. Install **Casa**, select the latest release, and restart Home Assistant.
+
+If Casa is already installed, open its HACS page and choose Update or Redownload, then select `v0.3.0`. Restart Home Assistant after the download. Existing account configuration and entity IDs are preserved.
 
 ### Manual
 
-Copy `custom_components/casahome` into your Home Assistant `config/custom_components/` folder and restart.
+Download `casahome.zip` from a [release](https://github.com/borski/ha-casahome/releases), extract its contents into `config/custom_components/casahome/`, and restart Home Assistant. `manifest.json` should be directly inside that directory. The ZIP contains integration files, not the entire repository.
+
+Alternatively, copy `custom_components/casahome` from the tagged source into your Home Assistant `config/custom_components/` folder and restart.
 
 ## Getting a refresh token
 
