@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -10,6 +11,7 @@ from homeassistant.components.sensor import SensorEntity, SensorEntityDescriptio
 from homeassistant.const import EntityCategory
 from homeassistant.core import callback
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -42,6 +44,24 @@ def add_inventory_devices(entry: CasaConfigEntry, add: AddConfigEntryEntitiesCal
     for home in main.data.homes:
         coordinator = main.read_coordinators[home.id][ReadFamily.INVENTORY]
         seen: set[str] = set()
+        # Enabled registry records must own real entity contexts before the first
+        # read, even when the home count is disabled. Placeholders carry no cached
+        # inventory values and never create a separate discovery/polling context.
+        registered_ids = re.compile(
+            rf"{re.escape(home.id)}_inventory_([a-zA-Z0-9_-]{{1,128}})_status\Z"
+        )
+        for registered in er.async_entries_for_config_entry(
+            er.async_get(main.hass), entry.entry_id
+        ):
+            if (
+                registered.domain == "sensor"
+                and registered.platform == DOMAIN
+                and registered.disabled_by is None
+                and (match := registered_ids.fullmatch(registered.unique_id)) is not None
+            ):
+                record_id = match.group(1)
+                seen.add(record_id)
+                add([CasaInventoryStatus(coordinator, home, record_id)])
 
         @callback
         def discover(
@@ -67,7 +87,7 @@ def add_inventory_devices(entry: CasaConfigEntry, add: AddConfigEntryEntitiesCal
                     )
             records = [record for record in coordinator.data.inventory if record.id not in seen]
             seen.update(record.id for record in records)
-            add(CasaInventoryStatus(coordinator, home, record) for record in records)
+            add(CasaInventoryStatus(coordinator, home, record.id, record) for record in records)
 
         coordinator.inventory_listener = discover
 
@@ -85,19 +105,33 @@ class CasaInventoryStatus(CasaAggregateEntity, SensorEntity):
     _attr_icon = "mdi:clipboard-check-outline"
 
     def __init__(
-        self, coordinator: CasaReadCoordinator, home: MemberSimpleHome, record: InventoryRecord
+        self,
+        coordinator: CasaReadCoordinator,
+        home: MemberSimpleHome,
+        record_id: str,
+        record: InventoryRecord | None = None,
     ) -> None:
         super().__init__(coordinator, home, "inventory_record_status")
         self.entity_description = SensorEntityDescription(
             key="inventory_record_status", translation_key="inventory_record_status"
         )
-        self._record_id = record.id
-        self._attr_unique_id = f"{home.id}_inventory_{record.id}_status"
+        self._record_id = record_id
+        self._attr_unique_id = f"{home.id}_inventory_{record_id}_status"
         parent = dr.async_get(coordinator.hass).async_get_device_by_identifier(
             (DOMAIN, home.id), coordinator.config_entry.entry_id
         )
         self._parent_id = parent.id if parent else None
-        self._attr_device_info = inventory_device_info(home.id, record, self._parent_id)
+        if record is not None:
+            self._attr_device_info = inventory_device_info(home.id, record, self._parent_id)
+        else:
+            # Omit descriptive fields so registering a placeholder doesn't wipe
+            # existing device metadata. State and attributes still require a fresh read.
+            self._attr_device_info = DeviceInfo(
+                identifiers={(DOMAIN, f"{home.id}_inventory_{record_id}")},
+                entry_type=DeviceEntryType.SERVICE,
+            )
+            if self._parent_id is not None:
+                self._attr_device_info["via_device_id"] = self._parent_id
 
     @property
     def record(self) -> InventoryRecord | None:
@@ -123,6 +157,10 @@ class CasaInventoryStatus(CasaAggregateEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         if record := self.record:
+            parent = dr.async_get(self.hass).async_get_device_by_identifier(
+                (DOMAIN, self.coordinator.home_id), self.coordinator.config_entry.entry_id
+            )
+            self._parent_id = parent.id if parent else None
             self._attr_device_info = inventory_device_info(
                 self.coordinator.home_id, record, self._parent_id
             )

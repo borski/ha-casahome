@@ -108,7 +108,11 @@ One `home_details` GET fetches stories, rooms, and all inventory entities. The i
 
 Devices have home-scoped stable identifiers, a home parent link, make, model, and the named `serial_number` property when supplied. Their single diagnostic sensor reports Casa's record status as bounded text, including new statuses without reinterpretation. The `suggested_room` attribute is a room-name suggestion only. HA's `suggested_area` creates areas, so the integration doesn't use it or assign rooms automatically. It doesn't merge identities with physical devices or overwrite user names or areas.
 
+Room references accept exact names or IDs from that home's stories. For shared items, the first valid reference in Casa's ordered `rooms` list wins, followed by the first valid `room_entity_map` entry as fallback. The displayed name is bounded and sanitized. Unknown names aren't exposed or turned into areas.
+
 New records are discovered dynamically while the inventory family is active. Removed records become unavailable without deleting registry entries. Reappearing records use fresh metadata. Missing make/model/serial stays missing, never inferred from candidate blobs. No static property sensors, model summaries, manuals, images, detail requests, or attachment downloads are created.
+
+On reload, enabled existing inventory-status entities are restored as unavailable placeholders before polling starts. They own normal polling contexts even when the home inventory count is disabled. They don't carry cached record values or add a hidden discovery context. Disabling the count and every status still stops all inventory I/O.
 
 ### Attention, mail, and maintenance
 
@@ -158,7 +162,7 @@ The original weather and credit probe remains in setup. Seven new endpoint reads
 
 Disabled entities don't poll. A new family is active only when it has an enabled entity. To stop inventory reads, disable its home count and all its record-status entities. Discovery itself isn't a polling context. Disabling a calendar removes its respective request. Weather and credits are still fetched once per home at setup, even if their sensors are disabled. A 404/405 disables only the failing endpoint until reload. Other failures retry on that family's normal interval.
 
-If bootstrap fails or a home disappears, its entities immediately go unavailable, caches are cleared, and timers pause. In-flight results from the old home/context generation are discarded, including stale 404/405 responses. Recovery requires a fresh response. Unload cancels entry-owned reads, debounce timers, and listeners without closing HA's shared SDK session. There's no push from Casa.
+If bootstrap fails or a home disappears, its entities immediately go unavailable, caches are cleared, and timers pause. In-flight results from the old home/context generation are discarded, including stale auth failures and 404/405 responses. Recovery requires a fresh response. Unload cancels and awaits active SDK child reads from setup and HA timer dispatch, and clears debounce timers and listeners without closing HA's shared SDK session. There's no push from Casa.
 
 ### Wire evidence and provisional contracts
 

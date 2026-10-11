@@ -35,6 +35,15 @@ _LOGGER = logging.getLogger(__name__)
 CATALOG_INTERVAL = timedelta(hours=24)
 
 
+async def _cancel_sdk_read(task: asyncio.Task[ReadData]) -> None:
+    """Finish child cleanup without repeated cancellation or upstream error details."""
+    if task.done():
+        return
+    if not task.cancelling():
+        task.cancel()
+    await asyncio.shield(asyncio.gather(task, return_exceptions=True))
+
+
 class CasaReadCoordinator(DataUpdateCoordinator[ReadData]):
     """One GET per active family. Each family has its own timer and error state."""
 
@@ -68,6 +77,7 @@ class CasaReadCoordinator(DataUpdateCoordinator[ReadData]):
         self._home_available = self.home_available
         self._started = False
         self._unsub_main: Callable[[], None] | None = None
+        self._fetch_task: asyncio.Task[ReadData] | None = None
         self.inventory_listener: Callable[[], None] | None = None
         entry.async_on_unload(self._stop_home_listener)
 
@@ -99,12 +109,7 @@ class CasaReadCoordinator(DataUpdateCoordinator[ReadData]):
 
     @callback
     def _request_fresh_data(self) -> None:
-        if (
-            self._started
-            and self.home_available
-            and any(self.async_contexts())
-            and not self.disabled
-        ):
+        if self._started and self._read_eligible:
             self.config_entry.async_create_background_task(
                 self.hass, self.async_request_refresh(), name=f"{self.name} fresh read"
             )
@@ -134,7 +139,7 @@ class CasaReadCoordinator(DataUpdateCoordinator[ReadData]):
 
     @callback
     def _schedule_refresh(self) -> None:
-        if self.home_available and not self.disabled:
+        if not self._shutdown_requested and self.home_available and not self.disabled:
             super()._schedule_refresh()
 
     @callback
@@ -147,6 +152,30 @@ class CasaReadCoordinator(DataUpdateCoordinator[ReadData]):
         """Called as an entry-owned task after platforms have registered contexts."""
         self._started = True
         await self.async_refresh()
+
+    @property
+    def _read_eligible(self) -> bool:
+        return (
+            not self._shutdown_requested
+            and self.home_available
+            and not self.disabled
+            and any(self.async_contexts())
+        )
+
+    def _is_current_read(self, generation: int) -> bool:
+        return generation == self._generation and self._read_eligible
+
+    async def async_shutdown(self) -> None:
+        """Cancel the SDK child itself, including reads dispatched by HA timers."""
+        await super().async_shutdown()
+        self._started = False
+        self._generation += 1
+        self.data = ReadData()
+        self._stop_home_listener()
+        if (task := self._fetch_task) is not None:
+            # Await only the child, never the dispatcher holding the debounce lock.
+            # No upstream exceptions or cancellation details escape shutdown.
+            await _cancel_sdk_read(task)
 
     async def _fetch_projection(self) -> ReadData:
         api = self.main_coordinator.api
@@ -176,19 +205,35 @@ class CasaReadCoordinator(DataUpdateCoordinator[ReadData]):
                 )
 
     async def _async_update_data(self) -> ReadData:
-        if not self.home_available or self.disabled or not any(self.async_contexts()):
+        if not self._read_eligible:
             return ReadData()
         generation = self._generation
         data = ReadData()
         try:
             async with asyncio.timeout(REQUEST_TIMEOUT_SECONDS):
-                data = await self._fetch_projection()
+                # A debounce wrapper can finish before HA dispatches its timer.
+                # Own the actual child through async_shutdown, not its dispatcher.
+                # Shielding avoids repeated cancellation from entry task groups
+                # interrupting the SDK's cancellation cleanup.
+                task = self.hass.async_create_background_task(
+                    self._fetch_projection(), name=f"{self.name} SDK read"
+                )
+                self._fetch_task = task
+                try:
+                    data = await asyncio.shield(task)
+                finally:
+                    try:
+                        await _cancel_sdk_read(task)
+                    finally:
+                        if self._fetch_task is task:
+                            self._fetch_task = None
         except CasaAuthError:
-            # Clear cached values even when HA's coordinator keeps its previous data.
-            self.data = ReadData()
-            raise ConfigEntryAuthFailed("Casa rejected the refresh token") from None
+            if self._is_current_read(generation):
+                # Clear cached values even when HA's coordinator keeps its previous data.
+                self.data = ReadData()
+                raise ConfigEntryAuthFailed("Casa rejected the refresh token") from None
         except CasaApiError as err:
-            if generation == self._generation and self.home_available and err.status in {404, 405}:
+            if self._is_current_read(generation) and err.status in {404, 405}:
                 self.disabled = True
                 self._unschedule_refresh()
                 _LOGGER.warning(
@@ -196,19 +241,15 @@ class CasaReadCoordinator(DataUpdateCoordinator[ReadData]):
                     self.family,
                     err.status,
                 )
-            elif generation == self._generation and self.home_available:
+            elif self._is_current_read(generation):
                 self.data = ReadData()
                 raise UpdateFailed(f"Casa read family returned HTTP {err.status}") from None
         except (CasaConnectionError, CasaResponseError, TimeoutError):
             # Never log upstream exception details, including schema input values.
-            if generation == self._generation and self.home_available:
+            if self._is_current_read(generation):
                 self.data = ReadData()
                 raise UpdateFailed("Casa read family is unavailable") from None
-        if (
-            generation != self._generation
-            or not self.home_available
-            or not any(self.async_contexts())
-        ):
+        if not self._is_current_read(generation):
             self._request_fresh_data()
             return ReadData()
         return data

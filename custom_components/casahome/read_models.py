@@ -75,6 +75,11 @@ def inventory_data(response: HomeDetailsResponse) -> ReadData:
     rooms = {
         room.id: bounded_text(room.name) for story in response.home.stories for room in story.rooms
     }
+    room_names = {
+        room.name: bounded_text(room.name)
+        for story in response.home.stories
+        for room in story.rooms
+    }
     records: list[InventoryRecord] = []
     seen: set[str] = set()
     for entity in response.entities:
@@ -86,8 +91,11 @@ def inventory_data(response: HomeDetailsResponse) -> ReadData:
         ):
             continue
         serial = entity.property_value("serial_number")
-        room_ids = entity.rooms or [
-            room_id for room_id, ids in response.room_entity_map.items() if entity.id in ids
+        # v3 rooms may be names. Accept only exact names or IDs from this home.
+        # Choose the first valid explicit reference, then fall back to the map.
+        room_refs = [
+            *entity.rooms,
+            *(room_id for room_id, ids in response.room_entity_map.items() if entity.id in ids),
         ]
         records.append(
             InventoryRecord(
@@ -97,7 +105,10 @@ def inventory_data(response: HomeDetailsResponse) -> ReadData:
                 manufacturer=bounded_text(entity.make.name) if entity.make else None,
                 model=bounded_text(entity.model.name) if entity.model else None,
                 serial_number=bounded_text(serial) if isinstance(serial, str) else None,
-                room=next((rooms[r] for r in room_ids if rooms.get(r)), None),
+                room=next(
+                    (name for ref in room_refs if (name := rooms.get(ref) or room_names.get(ref))),
+                    None,
+                ),
             )
         )
     return ReadData(counts=(("inventory_count", len(seen)),), inventory=tuple(records))
