@@ -93,6 +93,9 @@ def resolve_inventory_names(
         groups[_normalized(_base_name(record))].append(record)
 
     labels: dict[str, str] = {}
+    # Established ordinals from a compatible prior label that must follow the
+    # record when new peers force a qualifier onto its group.
+    carried: dict[str, int] = {}
     for group in groups.values():
         models = {_normalized(record.model or "") for record in group}
         makes = {_normalized(record.manufacturer or "") for record in group}
@@ -123,6 +126,17 @@ def resolve_inventory_names(
                     ),
                     label,
                 )
+                if _existing_ordinal(label, device.name) is None:
+                    prior = next(
+                        (
+                            ordinal
+                            for candidate in _record_labels(record)
+                            if (ordinal := _existing_ordinal(candidate, device.name))
+                        ),
+                        None,
+                    )
+                    if prior:
+                        carried[record.id] = prior
             labels[record.id] = label
 
     reserved = {_normalized(device.name) for device in devices.values() if device.name}
@@ -140,6 +154,16 @@ def resolve_inventory_names(
         ):
             assert device.name is not None
             result[record.id] = device.name
+    claimed = {_normalized(name) for name in result.values()}
+    # Carry prior ordinals into newly qualified labels before any new allocation.
+    for record in sorted(records, key=lambda record: carried.get(record.id, 0)):
+        if record.id in result or record.id not in carried:
+            continue
+        name = _numbered_name(labels[record.id], carried[record.id])
+        if _normalized(name) not in claimed:
+            result[record.id] = name
+            claimed.add(_normalized(name))
+            reserved.add(_normalized(name))
     for record in sorted(records, key=lambda record: record.id):
         if record.id in result:
             continue

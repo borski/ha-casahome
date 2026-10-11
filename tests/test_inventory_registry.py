@@ -132,6 +132,30 @@ async def test_initial_order_does_not_choose_ordinals(
     assert {item.id: device(hass, config_entry, item.id).name for item in items} == first
 
 
+async def test_new_peers_forcing_a_qualifier_keep_established_numbers(
+    hass: HomeAssistant, config_entry: MockConfigEntry
+) -> None:
+    config_entry.add_to_hass(hass)
+    owner = InventoryDeviceRegistry(hass, config_entry.entry_id, HOME_ID)
+    a, b = record("a", model="M1"), record("b", model="M1")
+    owner.async_refresh((a, b))
+    assert device(hass, config_entry, "a").name == "Garage Backup Battery 1"
+    assert device(hass, config_entry, "b").name == "Garage Backup Battery 2"
+    # A lower-sorting M1 peer and a different model arrive together. The existing
+    # devices keep their numbers inside the new qualified label.
+    new = (record("0", model="M1"), a, b, record("z", model="M2"))
+    owner.async_refresh(new)
+    names = {item.id: device(hass, config_entry, item.id).name for item in new}
+    assert names == {
+        "0": "Garage Backup Battery (M1) 3",
+        "a": "Garage Backup Battery (M1) 1",
+        "b": "Garage Backup Battery (M1) 2",
+        "z": "Garage Backup Battery (M2)",
+    }
+    owner.async_refresh(tuple(reversed(new)))
+    assert {item.id: device(hass, config_entry, item.id).name for item in new} == names
+
+
 async def test_distinct_models_and_makes_disambiguate_and_do_not_collapse_on_removal(
     hass: HomeAssistant, config_entry: MockConfigEntry, mock_api: MagicMock, mock_auth: MagicMock
 ) -> None:
