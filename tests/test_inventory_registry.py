@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -14,6 +15,7 @@ from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.casahome.const import DOMAIN
+from custom_components.casahome.inventory_areas import InventoryAreaMarkers
 from custom_components.casahome.inventory_devices import CasaInventoryStatus
 from custom_components.casahome.inventory_registry import InventoryDeviceRegistry
 from custom_components.casahome.read_models import InventoryRecord, ReadFamily, inventory_data
@@ -62,6 +64,13 @@ def device(hass: HomeAssistant, entry: MockConfigEntry, record_id: str) -> dr.De
     )
     assert result is not None
     return result
+
+
+async def owner(
+    hass: HomeAssistant, entry: MockConfigEntry, home_id: str = HOME_ID
+) -> InventoryDeviceRegistry:
+    markers = await InventoryAreaMarkers.async_load(hass, entry.entry_id)
+    return InventoryDeviceRegistry(hass, entry.entry_id, home_id, markers)
 
 
 async def refresh(
@@ -122,13 +131,13 @@ async def test_initial_order_does_not_choose_ordinals(
     hass: HomeAssistant, config_entry: MockConfigEntry
 ) -> None:
     config_entry.add_to_hass(hass)
-    owner = InventoryDeviceRegistry(hass, config_entry.entry_id, HOME_ID)
+    registry = await owner(hass, config_entry)
     items = (record("b"), record("a"), record("c"))
-    owner.async_refresh(items)
+    registry.async_refresh(items)
     first = {item.id: device(hass, config_entry, item.id).name for item in items}
     for item in items:
         dr.async_get(hass).async_remove_device(device(hass, config_entry, item.id).id)
-    owner.async_refresh(tuple(reversed(items)))
+    registry.async_refresh(tuple(reversed(items)))
     assert {item.id: device(hass, config_entry, item.id).name for item in items} == first
 
 
@@ -136,15 +145,15 @@ async def test_new_peers_forcing_a_qualifier_keep_established_numbers(
     hass: HomeAssistant, config_entry: MockConfigEntry
 ) -> None:
     config_entry.add_to_hass(hass)
-    owner = InventoryDeviceRegistry(hass, config_entry.entry_id, HOME_ID)
+    registry = await owner(hass, config_entry)
     a, b = record("a", model="M1"), record("b", model="M1")
-    owner.async_refresh((a, b))
+    registry.async_refresh((a, b))
     assert device(hass, config_entry, "a").name == "Garage Backup Battery 1"
     assert device(hass, config_entry, "b").name == "Garage Backup Battery 2"
     # A lower-sorting M1 peer and a different model arrive together. The existing
     # devices keep their numbers inside the new qualified label.
     new = (record("0", model="M1"), a, b, record("z", model="M2"))
-    owner.async_refresh(new)
+    registry.async_refresh(new)
     names = {item.id: device(hass, config_entry, item.id).name for item in new}
     assert names == {
         "0": "Garage Backup Battery (M1) 3",
@@ -152,7 +161,7 @@ async def test_new_peers_forcing_a_qualifier_keep_established_numbers(
         "b": "Garage Backup Battery (M1) 2",
         "z": "Garage Backup Battery (M2)",
     }
-    owner.async_refresh(tuple(reversed(new)))
+    registry.async_refresh(tuple(reversed(new)))
     assert {item.id: device(hass, config_entry, item.id).name for item in new} == names
 
 
@@ -235,7 +244,7 @@ async def test_base_names_and_legacy_room_projection_compatibility(
     hass: HomeAssistant, config_entry: MockConfigEntry, item: InventoryRecord, expected: str
 ) -> None:
     config_entry.add_to_hass(hass)
-    InventoryDeviceRegistry(hass, config_entry.entry_id, HOME_ID).async_refresh((item,))
+    (await owner(hass, config_entry)).async_refresh((item,))
     assert device(hass, config_entry, "a").name == expected
 
 
@@ -261,10 +270,12 @@ async def test_different_room_purifiers_and_unknown_source_room(
     )
 
 
-async def test_metadata_updates_names_without_overwriting_entity_overrides_or_placement(
+async def test_metadata_updates_names_without_overwriting_entity_overrides(
     hass: HomeAssistant, config_entry: MockConfigEntry, mock_api: MagicMock, mock_auth: MagicMock
 ) -> None:
-    area = ar.async_get(hass).async_create("Garage")
+    ar.async_get(hass).async_create("Garage")
+    # A custom device name isn't an area choice, so a managed area still follows Casa.
+    area = ar.async_get(hass).async_create("Office")
     items = (record("a"), record("b"))
     mock_api.home_details.return_value = response(*items)
     await setup(hass, config_entry)
@@ -312,7 +323,7 @@ async def test_metadata_updates_names_without_overwriting_entity_overrides_or_pl
         co,
         config_entry.runtime_data.data.homes[0],
         "a",
-        InventoryDeviceRegistry(hass, config_entry.entry_id, HOME_ID),
+        await owner(hass, config_entry),
     )
     assert status.device_info["name"] == updated.name
     assert "suggested_area" not in status.device_info
@@ -387,13 +398,16 @@ async def test_nonexact_or_ambiguous_placement_never_creates_areas(
     assert tuple(areas.async_list_areas()) == original
     state = hass.states.get(entity_id(hass, "inventory_a_status"))
     assert state is not None and state.attributes["suggested_room"] == "Kitchen"
-    # A later exact area match is not a second initial-placement attempt.
+    # The unplaced device stays managed. A later exact, unambiguous match places
+    # it into the user's new area, but ambiguous rooms still never assign.
     for area in original:
         areas.async_delete(area.id)
-    areas.async_create("Kitchen")
+    kitchen = areas.async_create("Kitchen")
     await coordinator(config_entry, ReadFamily.INVENTORY).async_refresh()
     await hass.async_block_till_done(wait_background_tasks=True)
-    assert device(hass, config_entry, "a").area_id is None
+    ambiguous = case in {"multiple_rooms", "duplicate_room_names"}
+    assert device(hass, config_entry, "a").area_id == (None if ambiguous else kitchen.id)
+    assert tuple(areas.async_list_areas()) == (kitchen,)
 
 
 @pytest.mark.parametrize("override", ["none", "name", "area", "disabled", "nonlegacy"])
@@ -511,3 +525,248 @@ def test_room_projection_collects_known_names_and_map_without_exporting_ids() ->
     projected = inventory_data(data).inventory[0]
     assert projected.room == "Kitchen" and projected.known_rooms == ("Kitchen", "Laundry")
     assert "room-0" not in repr(projected) and "unknown-private" not in repr(projected)
+
+
+def marker_store(entry: MockConfigEntry) -> str:
+    return f"{DOMAIN}.{entry.entry_id}.inventory_areas"
+
+
+def identifier(record_id: str) -> str:
+    return f"{HOME_ID}_inventory_{record_id}"
+
+
+async def reload(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+async def test_casa_room_change_moves_integration_placed_area(
+    hass: HomeAssistant, config_entry: MockConfigEntry, mock_api: MagicMock, mock_auth: MagicMock
+) -> None:
+    areas = ar.async_get(hass)
+    patio = areas.async_create("Laundry Patio")
+    garage = areas.async_create("Garage")
+    mock_api.home_details.return_value = response(record("a", room="Laundry Patio"))
+    await setup(hass, config_entry)
+    before = device(hass, config_entry, "a")
+    assert before.area_id == patio.id
+    await refresh(hass, config_entry, mock_api, record("a", room="Garage"))
+    moved = device(hass, config_entry, "a")
+    assert (moved.id, moved.area_id, moved.name) == (before.id, garage.id, "Garage Backup Battery")
+    assert len(tuple(areas.async_list_areas())) == 2
+
+
+async def test_unmatched_room_clears_managed_area_and_a_later_match_places_again(
+    hass: HomeAssistant, config_entry: MockConfigEntry, mock_api: MagicMock, mock_auth: MagicMock
+) -> None:
+    areas = ar.async_get(hass)
+    patio = areas.async_create("Laundry Patio")
+    garage = areas.async_create("Garage")
+    mock_api.home_details.return_value = response(record("a", room="Laundry Patio"))
+    await setup(hass, config_entry)
+    assert device(hass, config_entry, "a").area_id == patio.id
+    await refresh(hass, config_entry, mock_api, record("a", room="Attic"))
+    assert device(hass, config_entry, "a").area_id is None
+    await refresh(hass, config_entry, mock_api, record("a", room="Garage"))
+    assert device(hass, config_entry, "a").area_id == garage.id
+    # Ambiguity is also "no target": an integration-placed area clears.
+    await refresh(
+        hass, config_entry, mock_api, record("a", known_rooms=("Garage", "Laundry Patio"))
+    )
+    assert device(hass, config_entry, "a").area_id is None
+    assert {area.id for area in areas.async_list_areas()} == {patio.id, garage.id}
+
+
+@pytest.mark.parametrize("change", ["move", "clear", "delete_area"])
+async def test_any_user_area_change_ends_management_permanently(
+    hass: HomeAssistant,
+    hass_storage: dict[str, Any],
+    config_entry: MockConfigEntry,
+    mock_api: MagicMock,
+    mock_auth: MagicMock,
+    change: str,
+) -> None:
+    areas = ar.async_get(hass)
+    patio = areas.async_create("Laundry Patio")
+    garage = areas.async_create("Garage")
+    office = areas.async_create("Office")
+    mock_api.home_details.return_value = response(record("a", room="Laundry Patio"))
+    await setup(hass, config_entry)
+    placed = device(hass, config_entry, "a")
+    assert placed.area_id == patio.id
+    if change == "move":
+        dr.async_get(hass).async_update_device(placed.id, area_id=office.id)
+    elif change == "clear":
+        dr.async_get(hass).async_update_device(placed.id, area_id=None)
+    else:
+        areas.async_delete(patio.id)
+    expected = office.id if change == "move" else None
+    await refresh(hass, config_entry, mock_api, record("a", room="Garage"))
+    assert device(hass, config_entry, "a").area_id == expected
+    await reload(hass, config_entry)
+    assert identifier("a") not in hass_storage[marker_store(config_entry)]["data"]["devices"]
+    # Neither the old room, a recreated area, nor another move reclaims it.
+    if change == "delete_area":
+        areas.async_create("Laundry Patio")
+    for room in ("Laundry Patio", "Garage", "Attic", "Garage"):
+        await refresh(hass, config_entry, mock_api, record("a", room=room))
+        assert device(hass, config_entry, "a").area_id == expected
+    assert expected != garage.id
+
+
+async def test_legacy_migration_becomes_managed_and_follows(
+    hass: HomeAssistant, config_entry: MockConfigEntry, mock_api: MagicMock, mock_auth: MagicMock
+) -> None:
+    config_entry.add_to_hass(hass)
+    areas = ar.async_get(hass)
+    garage = areas.async_create("Garage")
+    patio = areas.async_create("Laundry Patio")
+    legacy = dr.async_get(hass).async_get_or_create(
+        config_entry_id=config_entry.entry_id,
+        identifiers={(DOMAIN, identifier("a"))},
+        entry_type=dr.DeviceEntryType.SERVICE,
+        name="Casa inventory Backup Battery",
+    )
+    mock_api.home_details.return_value = response(record("a", room="Garage"))
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert device(hass, config_entry, "a").area_id == garage.id
+    await refresh(hass, config_entry, mock_api, record("a", room="Laundry Patio"))
+    migrated = device(hass, config_entry, "a")
+    assert (migrated.id, migrated.area_id) == (legacy.id, patio.id)
+
+
+async def test_devices_without_markers_are_unmanaged(
+    hass: HomeAssistant,
+    hass_storage: dict[str, Any],
+    config_entry: MockConfigEntry,
+    mock_api: MagicMock,
+    mock_auth: MagicMock,
+) -> None:
+    """Devices placed before markers existed, or overridden at placement, stay put."""
+    config_entry.add_to_hass(hass)
+    areas = ar.async_get(hass)
+    garage = areas.async_create("Garage")
+    areas.async_create("Laundry Patio")
+    devices = dr.async_get(hass)
+    for key, area_id in (("a", garage.id), ("b", None)):
+        created = devices.async_get_or_create(
+            config_entry_id=config_entry.entry_id,
+            identifiers={(DOMAIN, identifier(key))},
+            entry_type=dr.DeviceEntryType.SERVICE,
+            name=f"Garage Backup Battery ({key})",
+        )
+        devices.async_update_device(created.id, area_id=area_id)
+    items = (record("a", model="a"), record("b", model="b"))
+    mock_api.home_details.return_value = response(*items)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    for room in ("Laundry Patio", "Attic", "Garage"):
+        await refresh(hass, config_entry, mock_api, *(replace(i, room=room) for i in items))
+        assert device(hass, config_entry, "a").area_id == garage.id
+        assert device(hass, config_entry, "b").area_id is None
+    await reload(hass, config_entry)
+    assert marker_store(config_entry) not in hass_storage
+
+
+async def test_disabled_managed_device_pauses_without_losing_its_marker(
+    hass: HomeAssistant, config_entry: MockConfigEntry, mock_api: MagicMock, mock_auth: MagicMock
+) -> None:
+    areas = ar.async_get(hass)
+    patio = areas.async_create("Laundry Patio")
+    garage = areas.async_create("Garage")
+    mock_api.home_details.return_value = response(record("a", room="Laundry Patio"))
+    await setup(hass, config_entry)
+    devices = dr.async_get(hass)
+    devices.async_update_device(
+        device(hass, config_entry, "a").id, disabled_by=dr.DeviceEntryDisabler.USER
+    )
+    await refresh(hass, config_entry, mock_api, record("a", room="Garage"))
+    assert device(hass, config_entry, "a").area_id == patio.id
+    devices.async_update_device(device(hass, config_entry, "a").id, disabled_by=None)
+    await refresh(hass, config_entry, mock_api, record("a", room="Garage"))
+    assert device(hass, config_entry, "a").area_id == garage.id
+
+
+async def test_markers_survive_reload_and_are_removed_with_the_entry(
+    hass: HomeAssistant,
+    hass_storage: dict[str, Any],
+    config_entry: MockConfigEntry,
+    mock_api: MagicMock,
+    mock_auth: MagicMock,
+) -> None:
+    areas = ar.async_get(hass)
+    patio = areas.async_create("Laundry Patio")
+    garage = areas.async_create("Garage")
+    mock_api.home_details.return_value = response(
+        record("a", room="Laundry Patio"), record("b", room="Attic")
+    )
+    await setup(hass, config_entry)
+    # Reload immediately: the delayed save must be flushed, not lost.
+    await reload(hass, config_entry)
+    stored = hass_storage[marker_store(config_entry)]
+    assert stored["version"] == 1
+    assert stored["data"] == {"devices": {identifier("a"): patio.id, identifier("b"): None}}
+    await refresh(
+        hass, config_entry, mock_api, record("a", room="Garage"), record("b", room="Laundry Patio")
+    )
+    assert device(hass, config_entry, "a").area_id == garage.id
+    assert device(hass, config_entry, "b").area_id == patio.id
+    # Absent records keep markers. Deleted registry devices are pruned.
+    dr.async_get(hass).async_remove_device(device(hass, config_entry, "b").id)
+    await refresh(hass, config_entry, mock_api)
+    await reload(hass, config_entry)
+    assert hass_storage[marker_store(config_entry)]["data"] == {
+        "devices": {identifier("a"): garage.id}
+    }
+    assert await hass.config_entries.async_remove(config_entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert marker_store(config_entry) not in hass_storage
+
+
+async def test_follow_is_scoped_to_this_entry_and_home(
+    hass: HomeAssistant,
+    hass_storage: dict[str, Any],
+    config_entry: MockConfigEntry,
+    mock_api: MagicMock,
+    mock_auth: MagicMock,
+) -> None:
+    areas = ar.async_get(hass)
+    patio = areas.async_create("Laundry Patio")
+    garage = areas.async_create("Garage")
+    other = MockConfigEntry(domain=DOMAIN, title="Other", unique_id="other-user")
+    other.add_to_hass(hass)
+    other_markers = {"devices": {identifier("a"): patio.id}}
+    hass_storage[marker_store(other)] = {
+        "version": 1,
+        "minor_version": 1,
+        "key": marker_store(other),
+        "data": other_markers,
+    }
+    devices = dr.async_get(hass)
+    foreign = devices.async_get_or_create(
+        config_entry_id=other.entry_id,
+        identifiers={(DOMAIN, identifier("a"))},
+        entry_type=dr.DeviceEntryType.SERVICE,
+        name="Laundry Patio Backup Battery",
+    )
+    devices.async_update_device(foreign.id, area_id=patio.id)
+    config_entry.add_to_hass(hass)
+    other_home = devices.async_get_or_create(
+        config_entry_id=config_entry.entry_id,
+        identifiers={(DOMAIN, "other_home_inventory_a")},
+        entry_type=dr.DeviceEntryType.SERVICE,
+        name="Laundry Patio Backup Battery",
+    )
+    devices.async_update_device(other_home.id, area_id=patio.id)
+    mock_api.home_details.return_value = response(record("a", room="Laundry Patio"))
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await refresh(hass, config_entry, mock_api, record("a", room="Garage"))
+    await reload(hass, config_entry)
+    assert devices.async_get(foreign.id).area_id == patio.id  # type: ignore[union-attr]
+    assert devices.async_get(other_home.id).area_id == patio.id  # type: ignore[union-attr]
+    assert hass_storage[marker_store(other)]["data"] == other_markers
+    own = device(hass, config_entry, "a")
+    assert own.area_id == garage.id and own.id not in {foreign.id, other_home.id}
+    assert len(tuple(areas.async_list_areas())) == 2

@@ -14,6 +14,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .const import CONF_DEVICE_ID, CONF_REFRESH_TOKEN, LEGACY_CONF_ENABLE_EXPERIMENTAL
 from .coordinator import CasaCoordinator
 from .home_coordinator import CasaHomeCoordinator
+from .inventory_areas import InventoryAreaMarkers
 from .read_coordinator import CasaReadCoordinator
 from .read_models import ReadFamily
 
@@ -165,3 +166,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: CasaConfigEntry) -> boo
     finally:
         if not unloaded:
             coordinator.async_resume_token_persistence()
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: CasaConfigEntry) -> None:
+    """Deleting the integration leaves no inventory area markers behind."""
+    await InventoryAreaMarkers.async_remove(hass, entry.entry_id)

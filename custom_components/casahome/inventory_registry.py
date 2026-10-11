@@ -1,4 +1,4 @@
-"""Room-aware defaults and one-time placement for virtual inventory devices."""
+"""Room-aware defaults and area placement that follows Casa until the user takes over."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 
 from custom_components.casahome.const import DOMAIN
+from custom_components.casahome.inventory_areas import InventoryAreaMarkers
 from custom_components.casahome.read_models import InventoryRecord
 
 _LEGACY_PREFIX = "Casa inventory "
@@ -194,10 +195,13 @@ def _matching_area(areas: Iterable[ar.AreaEntry], room: str | None) -> str | Non
 class InventoryDeviceRegistry:
     """One registry owner per home. Entities always read its selected default."""
 
-    def __init__(self, hass: HomeAssistant, entry_id: str, home_id: str) -> None:
+    def __init__(
+        self, hass: HomeAssistant, entry_id: str, home_id: str, markers: InventoryAreaMarkers
+    ) -> None:
         self._hass = hass
         self._entry_id = entry_id
         self._home_id = home_id
+        self._markers = markers
         self._registry = dr.async_get(hass)
         self._identifier_prefix = f"{home_id}_inventory_"
 
@@ -238,6 +242,10 @@ class InventoryDeviceRegistry:
             for domain, identifier in device.identifiers
             if domain == DOMAIN and identifier.startswith(self._identifier_prefix)
         }
+        # Absent records keep their markers while their devices are retained.
+        self._markers.prune(
+            self._identifier_prefix, (f"{self._identifier_prefix}{key}" for key in devices)
+        )
         names = resolve_inventory_names(records, devices)
         areas = tuple(ar.async_get(self._hass).async_list_areas())
         for record in records:
@@ -255,14 +263,44 @@ class InventoryDeviceRegistry:
                     model=record.model,
                     serial_number=record.serial_number,
                 )
-            # The migrated name itself is the persistent one-shot marker, even
-            # if no area matches. Never recreate areas or reclaim a cleared one.
-            if (
-                place
-                and device
-                and device.area_id is None
-                and device.name_by_user is None
-                and device.disabled_by is None
-                and (area_id := _matching_area(areas, _single_room(record)))
-            ):
-                self._registry.async_update_device(device.id, area_id=area_id)
+            if device is not None:
+                identifier = f"{self._identifier_prefix}{record.id}"
+                target = _matching_area(areas, _single_room(record))
+                if place:
+                    self._place(device, identifier, target)
+                else:
+                    self._follow(device, identifier, target)
+
+    @callback
+    def _place(self, device: dr.DeviceEntry, identifier: str, target: str | None) -> None:
+        """First discovery or legacy migration. The migrated name is the one-shot guard.
+
+        Only an untouched device becomes managed, even without a match, so a later
+        Casa room change can still place it. Never create areas.
+        """
+        if (
+            device.area_id is not None
+            or device.name_by_user is not None
+            or device.disabled_by is not None
+        ):
+            return
+        if target is not None:
+            self._registry.async_update_device(device.id, area_id=target)
+        self._markers.assign(identifier, target)
+
+    @callback
+    def _follow(self, device: dr.DeviceEntry, identifier: str, target: str | None) -> None:
+        """Move a managed area with Casa. Any area the user chose ends management.
+
+        Devices without a marker (user-overridden at placement, or created before
+        markers existed) are never touched. Disabled devices pause, keeping the marker.
+        """
+        if identifier not in self._markers or device.disabled_by is not None:
+            return
+        if device.area_id != self._markers.area_id(identifier):
+            # The user moved, cleared, or deleted the area. Never reclaim it.
+            self._markers.release(identifier)
+            return
+        if target != device.area_id:
+            self._registry.async_update_device(device.id, area_id=target)
+            self._markers.assign(identifier, target)

@@ -16,18 +16,27 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import CasaConfigEntry
 from .const import DOMAIN
+from .inventory_areas import InventoryAreaMarkers
 from .inventory_registry import InventoryDeviceRegistry
 from .read_coordinator import CasaReadCoordinator
 from .read_entities import CasaAggregateEntity
 from .read_models import InventoryRecord, ReadFamily
 
 
-def add_inventory_devices(entry: CasaConfigEntry, add: AddConfigEntryEntitiesCallback) -> None:
-    """Discovery callback isn't a polling context. All disabled means no inventory I/O."""
+async def async_add_inventory_devices(
+    entry: CasaConfigEntry, add: AddConfigEntryEntitiesCallback
+) -> None:
+    """Discovery callback isn't a polling context. All disabled means no inventory I/O.
+
+    Area markers load before any refresh can run and flush on unload, so a reload
+    never reads a store with a delayed save still pending.
+    """
     main = entry.runtime_data
+    markers = await InventoryAreaMarkers.async_load(main.hass, entry.entry_id)
+    entry.async_on_unload(markers.async_flush)
     for home in main.data.homes:
         coordinator = main.read_coordinators[home.id][ReadFamily.INVENTORY]
-        devices = InventoryDeviceRegistry(main.hass, entry.entry_id, home.id)
+        devices = InventoryDeviceRegistry(main.hass, entry.entry_id, home.id, markers)
         seen: set[str] = set()
         # Enabled registry records must own real entity contexts before the first
         # read, even when the home count is disabled. Placeholders carry no cached

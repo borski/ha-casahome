@@ -22,7 +22,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import CasaConfigEntry
 from .entity import CasaHomeEntity, home_device_info
 from .home_coordinator import CREDITS, WEATHER, CasaHomeCoordinator, HomeData, HomeEndpoint
-from .inventory_devices import add_inventory_devices
+from .inventory_devices import async_add_inventory_devices
 from .read_entities import add_read_sensors
 
 PARALLEL_UPDATES = 0
@@ -201,7 +201,7 @@ async def async_setup_entry(
     """Set up Casa sensors, one set per home."""
     coordinator = entry.runtime_data
     add_read_sensors(entry, async_add_entities)
-    add_inventory_devices(entry, async_add_entities)
+    await async_add_inventory_devices(entry, async_add_entities)
     async_add_entities(
         CasaSensor(coordinator, home, description)
         for home in coordinator.data.homes
