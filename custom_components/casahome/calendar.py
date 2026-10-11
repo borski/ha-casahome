@@ -1,4 +1,4 @@
-"""Read-only known onboarding visits, not the general visit calendar."""
+"""Separate read-only onboarding and regular service calendars."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from homeassistant.util import dt as dt_util
 from . import CasaConfigEntry
 from .home_coordinator import ONBOARDING
 from .home_data_entity import CasaHomeReadEntity
+from .service_calendar import add_service_calendars
 
 PARALLEL_UPDATES = 0
 ONBOARDING_CALENDAR = CalendarEntityDescription(
@@ -30,8 +31,9 @@ async def async_setup_entry(
     entry: CasaConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Create one onboarding-only calendar per home."""
+    """Create the two independent calendars for each home."""
     coordinator = entry.runtime_data
+    add_service_calendars(entry, async_add_entities)
     async_add_entities(
         CasaOnboardingCalendar(
             coordinator.home_coordinators[home.id], home, ONBOARDING_CALENDAR, ONBOARDING

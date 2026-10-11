@@ -36,6 +36,17 @@
   },
   "entity": {
     "sensor": {
+      "inventory_count": {"name": "Inventory records"},
+      "inventory_record_status": {"name": "Inventory record status"},
+      "requests_needs_review": {"name": "Fetched requests needing review"},
+      "requests_unread_fetched": {"name": "Fetched unread requests"},
+      "requests_awaiting_reply": {"name": "Fetched requests awaiting reply"},
+      "requests_scheduling_approval": {"name": "Fetched requests with scheduling prompts"},
+      "maintenance_enabled": {"name": "Enabled maintenance plans"},
+      "maintenance_eligible": {"name": "Eligible maintenance plans"},
+      "service_history_fetched": {"name": "Fetched service history records"},
+      "mail_unread_fetched": {"name": "Fetched unread nonarchived mail"},
+      "packages_nonarchived": {"name": "Fetched nonarchived packages"},
       "status": {
         "name": "Status",
         "state": {
@@ -86,11 +97,15 @@
       }
     },
     "calendar": {
+      "service_visits": {"name": "Service visits"},
       "onboarding_visits": {
         "name": "Onboarding visits"
       }
     },
     "binary_sensor": {
+      "requests_attention": {"name": "Fetched requests need attention"},
+      "mail_attention": {"name": "Fetched unread mail present"},
+      "packages_present": {"name": "Fetched nonarchived packages present"},
       "has_pending_agreements": {
         "name": "Agreement needs signature"
       },

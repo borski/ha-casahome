@@ -41,7 +41,7 @@ def _state(hass: HomeAssistant, entity_id: str) -> State:
 async def _setup(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
+    await hass.async_block_till_done(wait_background_tasks=True)
 
 
 def _never_expose_values() -> list[str]:
@@ -91,9 +91,9 @@ async def test_entity_counts_and_states(hass: HomeAssistant, config_entry: MockC
     await _setup(hass, config_entry)
     registry = er.async_get(hass)
     entries = er.async_entries_for_config_entry(registry, config_entry.entry_id)
-    # 7 from bootstrap plus weather and credits, all enabled by default.
-    assert len([e for e in entries if e.domain == "sensor"]) == 11
-    assert len([e for e in entries if e.domain == "binary_sensor"]) == 6
+    # 11 original and 10 aggregate count sensors, all enabled by default.
+    assert len([e for e in entries if e.domain == "sensor"]) == 21
+    assert len([e for e in entries if e.domain == "binary_sensor"]) == 9
     assert {e.unique_id for e in entries} >= {f"{HOME_ID}_status", f"{HOME_ID}_mailbox_badge"}
 
     assert _state(hass, f"{SENSOR}_status").state == "active"
@@ -110,7 +110,7 @@ async def test_entity_counts_and_states(hass: HomeAssistant, config_entry: MockC
     assert _state(hass, f"{BINARY}_calendar_sync").state == "off"
     collective = registry.async_get(f"{BINARY}_casa_collective_member")
     assert collective is not None
-    assert collective.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    assert collective.disabled_by is None
 
 
 async def test_one_device_per_home(

@@ -79,7 +79,7 @@ async def test_migrate_option_on_drops_option_and_enables_integration_disabled_s
         ("sensor", "handyman_hourly_rate"): er.RegistryEntryDisabler.INTEGRATION,
         # A user's choice survives migration.
         ("sensor", "weather_condition"): er.RegistryEntryDisabler.USER,
-        # So does an integration default that was never experimental.
+        # Collective is promoted independently by the 1.3 migration.
         ("binary_sensor", "casa_collective"): er.RegistryEntryDisabler.INTEGRATION,
     }
     for (domain, key), disabler in disabled_before.items():
@@ -91,7 +91,7 @@ async def test_migrate_option_on_drops_option_and_enables_integration_disabled_s
     await hass.async_block_till_done()
 
     assert entry.state is ConfigEntryState.LOADED
-    assert (entry.version, entry.minor_version) == (1, 2)
+    assert (entry.version, entry.minor_version) == (1, 3)
     assert entry.options == {}
 
     def disabled_by(domain: str, key: str) -> er.RegistryEntryDisabler | None:
@@ -105,7 +105,7 @@ async def test_migrate_option_on_drops_option_and_enables_integration_disabled_s
     assert disabled_by("sensor", "credits_available") is None
     assert disabled_by("sensor", "handyman_hourly_rate") is None
     assert disabled_by("sensor", "weather_condition") is er.RegistryEntryDisabler.USER
-    assert disabled_by("binary_sensor", "casa_collective") is er.RegistryEntryDisabler.INTEGRATION
+    assert disabled_by("binary_sensor", "casa_collective") is None
     credits_id = registry.async_get_entity_id("sensor", DOMAIN, f"{HOME_ID}_credits_available")
     assert credits_id is not None
     state = hass.states.get(credits_id)
@@ -123,7 +123,7 @@ async def test_migrate_option_off_or_missing(
     await hass.async_block_till_done()
 
     assert entry.state is ConfigEntryState.LOADED
-    assert (entry.version, entry.minor_version) == (1, 2)
+    assert (entry.version, entry.minor_version) == (1, 3)
     assert entry.options == {}
     registry = er.async_get(hass)
     for key in PROMOTED_KEYS:

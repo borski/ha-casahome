@@ -24,6 +24,8 @@ from .const import DOMAIN, REQUEST_TIMEOUT_SECONDS, UPDATE_INTERVAL
 if TYPE_CHECKING:
     from . import CasaConfigEntry
     from .home_coordinator import CasaHomeCoordinator
+    from .read_coordinator import CasaReadCoordinator
+    from .read_models import ReadFamily
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -54,6 +56,7 @@ class CasaCoordinator(DataUpdateCoordinator[Bootstrap]):
         self._resume_token_persistence = resume_token_persistence
         # Context-driven reads, one coordinator per home in the first bootstrap.
         self.home_coordinators: dict[str, CasaHomeCoordinator] = {}
+        self.read_coordinators: dict[str, dict[ReadFamily, CasaReadCoordinator]] = {}
 
     @callback
     def async_resume_token_persistence(self) -> None:

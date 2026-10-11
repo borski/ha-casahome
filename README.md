@@ -4,11 +4,13 @@ A Home Assistant integration for [Casa](https://getcasa.com), the home membershi
 
 Unofficial. Not affiliated with or endorsed by Casa.
 
-Each Casa home becomes one device with membership, badge, weather, and credit sensors, a read-only suggested task list, and a read-only onboarding visit calendar. The integration is built on [python-casahome](https://github.com/borski/python-casahome). It reads account data and never creates requests or schedules visits.
+Each Casa home becomes a device with membership, badge, weather, credit, inventory, attention, and maintenance sensors, a read-only suggested task list, and separate onboarding and regular service calendars. Selected inventory records become virtual devices linked to the home. The integration is built on [python-casahome](https://github.com/borski/python-casahome). It reads account data and never creates requests or schedules visits.
 
 ## Status
 
 Alpha. Casa has no public API, so endpoints and response shapes can change without notice. Expect breaking changes until 1.0.
+
+The local manifest is 0.3.0, a release candidate for the five-family expansion. This doesn't indicate a published release or deployment. The SDK pin remains PyPI 0.2.0.
 
 ## Requirements
 
@@ -56,6 +58,8 @@ Reauth checks that the new token belongs to the same account. A token for a diff
 
 0.1.0 hid the weather and credits sensors behind an "experimental" option. The first start after upgrading removes that option and enables those sensors, unless you disabled them yourself. If you had the option on, those sensors keep their entity IDs ending in `_experimental`. Rename them in entity settings if you like.
 
+Config entry minor version 3 also enables the Casa Collective diagnostic by default. Collective is Casa's beta program, not a subscription tier. Migration changes only integration-disabled Collective entities belonging to this entry. User-disabled entities and existing unique IDs and entity IDs stay unchanged. It doesn't enroll anyone in the beta program or change token values.
+
 ## Entities
 
 One device per Casa home, named after the home's address.
@@ -74,15 +78,53 @@ One device per Casa home, named after the home's address.
 | Payment method on file | Binary sensor | Diagnostic |
 | Post-onboarding steps pending | Binary sensor | Diagnostic |
 | Calendar sync | Binary sensor | Diagnostic. Unavailable if Casa doesn't say |
-| Casa Collective member | Binary sensor | Diagnostic, disabled by default |
+| Casa Collective member | Binary sensor | Diagnostic, enabled by default. `program: beta` |
 | Weather temperature | Sensor (temperature) | Unavailable if the unit isn't recognized |
 | Weather condition | Sensor | Casa's condition string as sent, such as `clear` |
 | Credits available | Sensor | Service credits on the home |
 | Handyman hourly rate | Sensor (monetary) | Diagnostic. Casa sends cents. USD is assumed |
 | Suggested tasks | Todo list | Read-only |
 | Onboarding visits | Calendar | Read-only |
+| Inventory records | Sensor | All fetched unique inventory entities, including non-device categories |
+| Fetched requests needing review | Sensor | Unique cards in `needs_review` |
+| Fetched unread requests | Sensor | Explicit `has_unread_messages` |
+| Fetched requests awaiting reply | Sensor | Explicit `concierge_awaiting_reply` |
+| Fetched requests with scheduling prompts | Sensor | Cards with positive `pending_schedule_prompt_count`, not number of prompts |
+| Fetched requests need attention | Binary sensor | Union of the four explicit request attention sets |
+| Enabled maintenance plans | Sensor | Eligible plans with `enabled: true` |
+| Eligible maintenance plans | Sensor | Unique plans in categories' `plans` lists, not `ineligible_plans` |
+| Fetched service history records | Sensor | Typed home-level `history_items` list length |
+| Fetched unread nonarchived mail | Sensor | `read_at` and `archived_at` are both null |
+| Fetched unread mail present | Binary sensor | The fetched unread nonarchived mail count is positive |
+| Fetched nonarchived packages | Sensor | Packages with explicit `archived: false` |
+| Fetched nonarchived packages present | Binary sensor | Not a delivery or pickup-ready assertion |
+| Service visits | Calendar | Read-only, provisional schema and bounded rolling coverage |
 
-That's 19 entities per home: 11 sensors, 6 binary sensors, 1 todo list, and 1 calendar. 18 are enabled by default.
+That's 33 entities per home: 21 sensors, 9 binary sensors, 1 todo list, and 2 calendars. All are enabled by default. Each selected inventory device adds one diagnostic record-status sensor. These are inventory records, not live device controls or telemetry.
+
+### Inventory devices
+
+One `home_details` GET fetches stories, rooms, and all inventory entities. The inventory count includes unique IDs across all categories. Appliances, Electronics, Utility/Utilities, and Safety categories create virtual Casa inventory devices. Matching is case-insensitive and exact. Other and future categories, including bulbs, paint, and structure, still contribute to the total but don't create individual devices.
+
+Devices have home-scoped stable identifiers, a home parent link, make, model, and the named `serial_number` property when supplied. Their single diagnostic sensor reports Casa's record status as bounded text, including new statuses without reinterpretation. The `suggested_room` attribute is a room-name suggestion only. HA's `suggested_area` creates areas, so the integration doesn't use it or assign rooms automatically. It doesn't merge identities with physical devices or overwrite user names or areas.
+
+New records are discovered dynamically while the inventory family is active. Removed records become unavailable without deleting registry entries. Reappearing records use fresh metadata. Missing make/model/serial stays missing, never inferred from candidate blobs. No static property sensors, model summaries, manuals, images, detail requests, or attachment downloads are created.
+
+### Attention, mail, and maintenance
+
+All count and attention entities carry `scope: fetched_response`. Counts describe fetched cards or lists, not account-wide totals, section display counts, or badge totals. Request cards are deduplicated by ID across `needs_review` and sections. Positive explicit flags are combined across duplicates. Invoice/purchase counts, task lanes, vendor contact, message content, and titles don't affect attention.
+
+Mail requires both null `read_at` and null `archived_at`. Packages use the SDK's separate `archived` boolean. Unknown package statuses aren't mapped to delivered or pickup-ready. Maintenance counts use category `plans` and explicit `plan.enabled`, not associations, quoted prices, or opaque plan metadata. Service history uses one home-target aggregate GET with the home ID as the SDK-required target ID. There's no per-device history fanout, guessed overdue date, or latest-service timestamp sensor.
+
+An empty successful response reads as zero. A failed response is unavailable, not zero. One family's failure never makes another unavailable.
+
+### Regular service visits
+
+The regular calendar is separate from onboarding. Its cache spans exactly 31 UTC days, starting at the previous UTC midnight. It refreshes every 15 minutes. `coverage_start` and `coverage_end` describe the actual fetched half-open window. Calendar queries are local only. A query outside coverage fails explicitly instead of fabricating an empty answer. Historical views and a full calendar month may fall outside coverage.
+
+Events use validated IDs, deduplication, UTC instant ordering, and the generic title `Casa service visit`. No vendor, event kind, location, description, links, or opaque payloads are exported. Invalid IDs or time bounds invalidate that family's whole response. The provisional codec assumes integer epoch seconds between 2000 and 2100 and requires end after start. Milliseconds and implausible/reversed values are rejected. Aware query datetimes are compared in UTC, including DST folds.
+
+The calendar exposes `item_schema: provisional` and `timestamp_codec: epoch_seconds_assumed`. An empty live envelope doesn't verify populated items or server interpretation of timestamp units and boundary inclusivity.
 
 ### Suggested tasks
 
@@ -104,17 +146,29 @@ If one of these endpoints returns 404 or 405, the integration logs one warning a
 
 ## Data updates
 
-The integration polls every 15 minutes. Each cycle makes one shared bootstrap request, plus up to four requests per home: weather, credits, suggestions, and onboarding. For N homes that's at most `1 + 4N` requests, not counting token refreshes and retries.
+Bootstrap, weather, credits, suggestions, onboarding, requests, service history, mail, packages, and regular service calendar poll every 15 minutes when active. Inventory metadata and the maintenance catalog poll every 24 hours. Their slower rate is intentional because these are descriptive records, not telemetry. Manual refresh, reload, re-enabling, and home recovery can trigger a fresh read sooner.
 
-Disabled entities don't poll. Disabling the todo list or calendar removes that request for the home. Weather and credits are still fetched once per home at setup, even if their sensors are disabled.
+| Phase | Maximum aggregate requests for N homes |
+|-------|------------------------------------------|
+| Initial setup and background reads | `1 + 11N` |
+| Normal 15-minute updates | `1 + 9N` |
+| When both daily catalogs are also due | Up to `1 + 11N` |
 
-If bootstrap fails or a home disappears, its entities go unavailable and polling resumes on recovery. Stale data isn't shown after a home comes back. There's no push from Casa.
+The original weather and credit probe remains in setup. Seven new endpoint reads per home start concurrently as entry-owned background tasks after platforms register contexts, so their latency doesn't serialize or block bootstrap setup. Each is independently bounded by the existing request timeout. Onboarding and suggestions keep their existing setup flow. Calls aren't guaranteed to land at the same wall-clock instant. These budgets exclude token refreshes and SDK retries.
+
+Disabled entities don't poll. A new family is active only when it has an enabled entity. To stop inventory reads, disable its home count and all its record-status entities. Discovery itself isn't a polling context. Disabling a calendar removes its respective request. Weather and credits are still fetched once per home at setup, even if their sensors are disabled. A 404/405 disables only the failing endpoint until reload. Other failures retry on that family's normal interval.
+
+If bootstrap fails or a home disappears, its entities immediately go unavailable, caches are cleared, and timers pause. In-flight results from the old home/context generation are discarded, including stale 404/405 responses. Recovery requires a fresh response. Unload cancels entry-owned reads, debounce timers, and listeners without closing HA's shared SDK session. There's no push from Casa.
+
+### Wire evidence and provisional contracts
+
+Evidence here comes from the SDK's documented contracts, not additional live probes by this integration change. Inventory entities and populated maintenance catalog variants are VERIFIED in SDK evidence. Requests, mail, packages, service history, and regular calendar have VERIFIED GET paths and empty response envelopes. Their populated item fields remain UNVERIFIED, modeled from static app metadata. Empty lists don't establish a populated contract. Synthetic HA tests establish projection and lifecycle behavior, not server compatibility with every populated account. New fields are dropped rather than exported. Known SDK schema errors make only that family unavailable without logging raw values.
 
 ## Privacy
 
-Diagnostics redact contact details, address, coordinates, payment and billing fields, Matterport credentials, agreement text, the refresh token, and the device ID. Fields Casa adds later are dropped rather than passed through. Diagnostics don't include suggested tasks or onboarding visits.
+Diagnostics redact contact details, address, coordinates, payment and billing fields, Matterport credentials, agreement text, the refresh token, and the device ID. Fields Casa adds later are dropped rather than passed through. Diagnostics don't include inventory metadata, new read-family payloads, suggested tasks, or calendars.
 
-Task titles and visit times are visible to any Home Assistant user who can see those entities. Errors are logged without tokens or raw exception details.
+Task titles, visit times, inventory make/model/serial, and suggested rooms are visible to Home Assistant users with access. New count entities don't expose sender/addressee, previews, tracking numbers, QR codes, summaries, invoice/payment data, prices, signed URLs, or source extras. Errors are logged without tokens or raw exception details.
 
 ## Known limitations
 
@@ -122,9 +176,11 @@ Task titles and visit times are visible to any Home Assistant user who can see t
 - The handyman rate assumes USD.
 - New homes appear after a reload. Removed homes go unavailable, and their device stays until you delete it.
 - Suggested tasks only map one known status.
-- The calendar covers onboarding visits only, not regular service visits.
+- Regular service calendar queries must fit its explicit rolling cache coverage. Its item schema and epoch-seconds interpretation remain provisional.
+- Request, mail, package, and service history populated item schemas remain unverified against live responses. Counts apply only to fetched items.
 - No write actions. The integration can't create requests, accept suggestions, or book visits.
-- Inventory, billing, purchases, and Casa AI chat aren't supported.
+- Virtual inventory devices aren't physical device connections. Unknown categories don't create devices, and identity candidates aren't guessed.
+- Billing, purchases, and Casa AI chat aren't supported.
 
 ## Removal
 

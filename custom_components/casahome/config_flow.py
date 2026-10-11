@@ -92,8 +92,8 @@ class CasaConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a Casa config flow."""
 
     VERSION = 1
-    # 2 dropped the experimental option. See async_migrate_entry.
-    MINOR_VERSION = 2
+    # 2 dropped the experimental option. 3 promotes Collective. See async_migrate_entry.
+    MINOR_VERSION = 3
 
     def __init__(self) -> None:
         super().__init__()

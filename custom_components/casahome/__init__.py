@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from casahome import CasaApi, CasaClient, FirebaseAuth
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
@@ -12,6 +14,8 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .const import CONF_DEVICE_ID, CONF_REFRESH_TOKEN, LEGACY_CONF_ENABLE_EXPERIMENTAL
 from .coordinator import CasaCoordinator
 from .home_coordinator import CasaHomeCoordinator
+from .read_coordinator import CasaReadCoordinator
+from .read_models import ReadFamily
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
@@ -87,6 +91,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: CasaConfigEntry) -> bool
         # Existing sensor unit setup needs the weather/credits probe before add.
         await home_coordinator.async_refresh()
         coordinator.home_coordinators[home.id] = home_coordinator
+        coordinator.read_coordinators[home.id] = {
+            family: CasaReadCoordinator(hass, entry, coordinator, home.id, family)
+            for family in ReadFamily
+        }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     # Entities have registered their contexts now. New read families never probe
@@ -94,6 +102,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: CasaConfigEntry) -> bool
     for home_coordinator in coordinator.home_coordinators.values():
         # Plain refresh: per-home failures must never block bootstrap setup.
         await home_coordinator.async_refresh_new_platforms()
+
+    async def start_reads() -> None:
+        # Independent bounded reads run concurrently after bootstrap setup. HA owns
+        # and cancels this task on unload. The shared SDK session stays open.
+        async with asyncio.TaskGroup() as tasks:
+            for families in coordinator.read_coordinators.values():
+                for read_coordinator in families.values():
+                    tasks.create_task(read_coordinator.async_start())
+
+    entry.async_create_background_task(hass, start_reads(), name="Casa aggregate reads")
     return True
 
 
@@ -103,7 +121,7 @@ def _is_promoted_sensor(unique_id: str) -> bool:
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: CasaConfigEntry) -> bool:
-    """Migrate older config entries. 1.1 to 1.2 drops the experimental option."""
+    """Retain 1.2 promotion and enable the Collective beta diagnostic in 1.3."""
     if entry.version > 1:
         # Downgrade from a future version. Refuse rather than guess.
         return False
@@ -123,6 +141,16 @@ async def async_migrate_entry(hass: HomeAssistant, entry: CasaConfigEntry) -> bo
             if key != LEGACY_CONF_ENABLE_EXPERIMENTAL
         }
         hass.config_entries.async_update_entry(entry, options=options, minor_version=2)
+    if entry.minor_version < 3:
+        registry = er.async_get(hass)
+        for registered in er.async_entries_for_config_entry(registry, entry.entry_id):
+            if (
+                registered.domain == Platform.BINARY_SENSOR
+                and registered.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+                and registered.unique_id.endswith("_casa_collective")
+            ):
+                registry.async_update_entity(registered.entity_id, disabled_by=None)
+        hass.config_entries.async_update_entry(entry, minor_version=3)
     return True
 
 

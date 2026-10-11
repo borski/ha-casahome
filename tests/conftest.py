@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Generator
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -22,6 +23,8 @@ from pytest_homeassistant_custom_component.syrupy import HomeAssistantSnapshotEx
 from syrupy.assertion import SnapshotAssertion
 
 from custom_components.casahome.const import CONF_DEVICE_ID, CONF_REFRESH_TOKEN, DOMAIN
+
+from . import expanded_fixtures as read_fixtures
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -64,6 +67,7 @@ def mock_expanded_sdk_reads() -> Generator[None]:
     synthetic models. This doesn't patch Firebase auth or the HTTP write guard.
     """
     with (
+        ExitStack() as stack,
         patch.object(
             CasaApi,
             "suggested_todos",
@@ -75,6 +79,16 @@ def mock_expanded_sdk_reads() -> Generator[None]:
             new=AsyncMock(return_value=OnboardingDetailsResponse(calendar_events=[])),
         ),
     ):
+        for method, response in {
+            "home_details": read_fixtures.inventory(),
+            "requests_tab": read_fixtures.requests(),
+            "autopilot_plans": [],
+            "inventory_service_history": read_fixtures.history(),
+            "mail_items": read_fixtures.mail(),
+            "packages": read_fixtures.packages(),
+            "calendar": read_fixtures.calendar(),
+        }.items():
+            stack.enter_context(patch.object(CasaApi, method, new=AsyncMock(return_value=response)))
         yield
 
 
@@ -82,6 +96,16 @@ def mock_expanded_sdk_reads() -> Generator[None]:
 def mock_api() -> Generator[MagicMock]:
     """Patch CasaApi everywhere the integration constructs it."""
     api = MagicMock(spec=CasaApi)
+    for method, response in {
+        "home_details": read_fixtures.inventory(),
+        "requests_tab": read_fixtures.requests(),
+        "autopilot_plans": [],
+        "inventory_service_history": read_fixtures.history(),
+        "mail_items": read_fixtures.mail(),
+        "packages": read_fixtures.packages(),
+        "calendar": read_fixtures.calendar(),
+    }.items():
+        setattr(api, method, AsyncMock(return_value=response))
     api.bootstrap = AsyncMock(return_value=bootstrap_model())
     api.badge_counts = AsyncMock()
     # Real models, never MagicMocks, so entities see the live shape.
@@ -141,7 +165,7 @@ def config_entry() -> MockConfigEntry:
         title="Michael",
         unique_id=USER_ID,
         data={CONF_REFRESH_TOKEN: REFRESH_TOKEN, CONF_DEVICE_ID: DEVICE_ID},
-        minor_version=2,
+        minor_version=3,
     )
 
 

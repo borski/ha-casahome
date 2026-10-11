@@ -1,8 +1,8 @@
-"""Casa binary sensors. Every value here comes from the bootstrap response."""
+"""Casa bootstrap diagnostics and aggregate attention binary sensors."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from casahome.models import Bootstrap, MemberSimpleHome
@@ -17,6 +17,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import CasaConfigEntry
 from .entity import CasaHomeEntity
+from .read_entities import add_read_binary_sensors
 
 PARALLEL_UPDATES = 0
 
@@ -67,7 +68,6 @@ BINARY_SENSORS: tuple[CasaBinarySensorEntityDescription, ...] = (
         translation_key="casa_collective",
         icon="mdi:account-group",
         entity_category=EntityCategory.DIAGNOSTIC,
-        entity_registry_enabled_default=False,
         value_fn=lambda _, bootstrap: bootstrap.is_casa_collective,
     ),
 )
@@ -80,6 +80,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up Casa binary sensors, one set per home."""
     coordinator = entry.runtime_data
+    add_read_binary_sensors(entry, async_add_entities)
     async_add_entities(
         CasaBinarySensor(coordinator, home, description)
         for home in coordinator.data.homes
@@ -105,3 +106,7 @@ class CasaBinarySensor(CasaHomeEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool | None:
         return self._value()
+
+    @property
+    def extra_state_attributes(self) -> Mapping[str, str] | None:
+        return {"program": "beta"} if self.entity_description.key == "casa_collective" else None

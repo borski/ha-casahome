@@ -43,7 +43,7 @@ async def test_user_happy_path(
     device_id = result["data"][CONF_DEVICE_ID]
     assert str(uuid.UUID(device_id)).upper() == device_id
     assert result["options"] == {}
-    assert result["result"].minor_version == 2  # new entries never need migration
+    assert result["result"].minor_version == 3  # new entries never need migration
     # The flow's bootstrap and setup's bootstrap must share one device id.
     assert mock_api.flow_cls.call_args.kwargs["device_id"] == device_id
     assert mock_api.init_cls.call_args.kwargs["device_id"] == device_id

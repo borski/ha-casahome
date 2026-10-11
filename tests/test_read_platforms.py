@@ -110,8 +110,8 @@ async def test_setup_counts_device_labels_and_call_budget(
 ) -> None:
     await setup(hass, config_entry)
     entries = er.async_entries_for_config_entry(er.async_get(hass), config_entry.entry_id)
-    assert len(entries) == 19
-    assert sum(entry.disabled_by is None for entry in entries) == 18
+    assert len(entries) == 33
+    assert sum(entry.disabled_by is None for entry in entries) == 33
     for domain in KEYS:
         entry = er.async_get(hass).async_get(entity_id(hass, domain))
         assert entry is not None and entry.disabled_by is None
@@ -136,9 +136,16 @@ async def test_setup_counts_device_labels_and_call_budget(
         "credits_summary",
         "suggested_todos",
         "onboarding_details_typed",
+        "home_details",
+        "requests_tab",
+        "autopilot_plans",
+        "inventory_service_history",
+        "mail_items",
+        "packages",
+        "calendar",
     }
     read_api.todo_details.assert_not_called()
-    read_api.calendar.assert_not_called()
+    read_api.calendar.assert_awaited_once()
     read_api.create_todo.assert_not_called()
 
 
@@ -535,7 +542,7 @@ async def test_two_homes_isolated_and_entry_schema_unchanged(
     read_api.bootstrap.return_value = bootstrap_model(homes=[raw["homes"][0], second])
     read_api.suggested_todos.side_effect = [suggestions(1), suggestions(2)]
     await setup(hass, config_entry)
-    assert (config_entry.version, config_entry.minor_version) == (1, 2)
+    assert (config_entry.version, config_entry.minor_version) == (1, 3)
     assert config_entry.options == {}
     for domain in KEYS:
         assert entity_id(hass, domain, HOME_ID) != entity_id(hass, domain, second_id)
