@@ -42,6 +42,7 @@ class CasaCoordinator(DataUpdateCoordinator[Bootstrap]):
         )
         self.api = api
         self._schema_warned = False
+        self.token_persistence_active = True
         # Per home, only populated when the experimental option is on.
         self.experimental: dict[str, CasaExperimentalCoordinator] = {}
 
@@ -49,16 +50,16 @@ class CasaCoordinator(DataUpdateCoordinator[Bootstrap]):
         try:
             async with asyncio.timeout(REQUEST_TIMEOUT_SECONDS):
                 data = await self.api.bootstrap()
-        except CasaAuthError as err:
-            raise ConfigEntryAuthFailed("Casa rejected the refresh token") from err
-        except (CasaConnectionError, TimeoutError) as err:
-            raise UpdateFailed("Casa unreachable") from err
-        except CasaResponseError as err:
+        except CasaAuthError:
+            raise ConfigEntryAuthFailed("Casa rejected the refresh token") from None
+        except (CasaConnectionError, TimeoutError):
+            raise UpdateFailed("Casa unreachable") from None
+        except CasaResponseError:
             if not self._schema_warned:
                 _LOGGER.warning("Casa bootstrap response didn't match the expected schema")
                 self._schema_warned = True
-            raise UpdateFailed("Casa response didn't match the expected schema") from err
+            raise UpdateFailed("Casa response didn't match the expected schema") from None
         except CasaApiError as err:
-            raise UpdateFailed(f"Casa returned HTTP {err.status}") from err
+            raise UpdateFailed(f"Casa returned HTTP {err.status}") from None
         self._schema_warned = False
         return data

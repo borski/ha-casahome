@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from math import isfinite
 from typing import Any
 
 from casahome.models import Bootstrap, MemberSimpleHome
@@ -14,13 +15,19 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import EntityCategory, UnitOfTemperature
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import CasaConfigEntry
 from .entity import CasaHomeEntity, home_device_info
-from .experimental import CasaExperimentalCoordinator, ExperimentalData
+from .experimental import (
+    CREDITS,
+    WEATHER,
+    CasaExperimentalCoordinator,
+    ExperimentalData,
+    ExperimentalEndpoint,
+)
 
 PARALLEL_UPDATES = 0
 
@@ -130,11 +137,18 @@ def _condition(data: ExperimentalData) -> str | None:
     return str(getattr(data.weather.condition_type, "value", data.weather.condition_type))
 
 
+def _temperature(data: ExperimentalData) -> float | None:
+    if data.weather is None or not isfinite(data.weather.temperature_degrees):
+        return None
+    return data.weather.temperature_degrees
+
+
 @dataclass(frozen=True, kw_only=True)
 class CasaExperimentalSensorEntityDescription(SensorEntityDescription):
     """Sensor over an unverified endpoint. Off by default, behind the option gate too."""
 
     value_fn: Callable[[ExperimentalData], Any]
+    endpoint: ExperimentalEndpoint
     unit_fn: Callable[[ExperimentalData], str | None] | None = None
     entity_registry_enabled_default: bool = False
 
@@ -142,20 +156,23 @@ class CasaExperimentalSensorEntityDescription(SensorEntityDescription):
 EXPERIMENTAL_SENSORS: tuple[CasaExperimentalSensorEntityDescription, ...] = (
     CasaExperimentalSensorEntityDescription(
         key="weather_temperature",
+        endpoint=WEATHER,
         translation_key="weather_temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda d: d.weather.temperature_degrees if d.weather else None,
+        value_fn=_temperature,
         unit_fn=_temperature_unit,
     ),
     CasaExperimentalSensorEntityDescription(
         key="weather_condition",
+        endpoint=WEATHER,
         translation_key="weather_condition",
         icon="mdi:weather-partly-cloudy",
         value_fn=_condition,
     ),
     CasaExperimentalSensorEntityDescription(
         key="credits_available",
+        endpoint=CREDITS,
         translation_key="credits_available",
         icon="mdi:ticket-percent",
         state_class=SensorStateClass.MEASUREMENT,
@@ -163,6 +180,7 @@ EXPERIMENTAL_SENSORS: tuple[CasaExperimentalSensorEntityDescription, ...] = (
     ),
     CasaExperimentalSensorEntityDescription(
         key="handyman_hourly_rate",
+        endpoint=CREDITS,
         translation_key="handyman_hourly_rate",
         device_class=SensorDeviceClass.MONETARY,
         # Field is named *_cents. Casa is US only, so USD is an assumption, not observed.
@@ -235,14 +253,34 @@ class CasaExperimentalSensor(CoordinatorEntity[CasaExperimentalCoordinator], Sen
         home: MemberSimpleHome,
         description: CasaExperimentalSensorEntityDescription,
     ) -> None:
-        super().__init__(coordinator)
+        super().__init__(coordinator, context=description.endpoint)
         self.entity_description = description
         self._attr_unique_id = f"{home.id}_{description.key}"
         self._attr_device_info = home_device_info(home)
 
+    async def async_added_to_hass(self) -> None:
+        """Listen to bootstrap as well as experimental endpoint updates."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            self.coordinator.main_coordinator.async_add_listener(
+                self._handle_main_coordinator_update
+            )
+        )
+        self.coordinator.async_update_home()
+
+    @callback
+    def _handle_main_coordinator_update(self) -> None:
+        """Immediately reflect home removal or bootstrap failure."""
+        self.coordinator.async_update_home()
+        self.async_write_ha_state()
+
     @property
     def available(self) -> bool:
-        if not super().available or self.coordinator.data is None:
+        if (
+            not super().available
+            or not self.coordinator.home_available
+            or self.coordinator.data is None
+        ):
             return False
         if self.entity_description.unit_fn and self.native_unit_of_measurement is None:
             return False

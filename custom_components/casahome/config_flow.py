@@ -89,10 +89,14 @@ class CasaConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    def __init__(self) -> None:
+        super().__init__()
+        self._device_id = str(uuid.uuid4()).upper()
+
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
-            device_id = str(uuid.uuid4()).upper()
+            device_id = self._device_id
             try:
                 result = await _validate(self.hass, user_input[CONF_REFRESH_TOKEN], device_id)
             except Exception as err:  # mapped to a form error

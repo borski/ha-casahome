@@ -11,7 +11,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final, Literal
 
 from casahome import (
     CasaApi,
@@ -21,7 +21,7 @@ from casahome import (
     CasaResponseError,
 )
 from casahome.models import MemberCredits, WeatherResponse
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -29,14 +29,16 @@ from .const import DOMAIN, REQUEST_TIMEOUT_SECONDS, UPDATE_INTERVAL
 
 if TYPE_CHECKING:
     from . import CasaConfigEntry
+    from .coordinator import CasaCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
 # HTTP statuses that mean "this endpoint doesn't exist as guessed". Stop calling it.
 DISABLING_STATUSES = frozenset({404, 405})
 
-WEATHER = "weather"
-CREDITS = "credits_summary"
+WEATHER: Final = "weather"
+CREDITS: Final = "credits_summary"
+type ExperimentalEndpoint = Literal["weather", "credits_summary"]
 
 
 @dataclass(frozen=True)
@@ -53,7 +55,12 @@ class CasaExperimentalCoordinator(DataUpdateCoordinator[ExperimentalData]):
     config_entry: CasaConfigEntry
 
     def __init__(
-        self, hass: HomeAssistant, entry: CasaConfigEntry, api: CasaApi, home_id: str
+        self,
+        hass: HomeAssistant,
+        entry: CasaConfigEntry,
+        api: CasaApi,
+        home_id: str,
+        main_coordinator: CasaCoordinator | None = None,
     ) -> None:
         super().__init__(
             hass,
@@ -64,11 +71,45 @@ class CasaExperimentalCoordinator(DataUpdateCoordinator[ExperimentalData]):
         )
         self.api = api
         self.home_id = home_id
+        self.main_coordinator = (
+            main_coordinator if main_coordinator is not None else entry.runtime_data
+        )
+        self._home_available = self.home_available
+        self._initial_probe = True
         # Lives for the life of the entry. A reload (or HA restart) retries.
         self.disabled: set[str] = set()
 
+    @property
+    def home_available(self) -> bool:
+        """Return whether bootstrap still authorizes access to this home."""
+        return (
+            self.main_coordinator.last_update_success
+            and self.main_coordinator.data is not None
+            and any(home.id == self.home_id for home in self.main_coordinator.data.homes)
+        )
+
+    @callback
+    def async_update_home(self) -> None:
+        """Pause polling on home loss and refresh active sensors on recovery."""
+        was_available = self._home_available
+        self._home_available = self.home_available
+        if not self._home_available:
+            self._unschedule_refresh()
+        elif not was_available and any(self.async_contexts()):
+            self.config_entry.async_create_background_task(
+                self.hass,
+                self.async_request_refresh(),
+                name=f"{self.name} home recovered",
+            )
+
+    @callback
+    def _schedule_refresh(self) -> None:
+        """Only schedule recurring updates while the home is accessible."""
+        if self.home_available:
+            super()._schedule_refresh()
+
     async def _fetch[T](self, name: str, call: Callable[[str], Awaitable[T]]) -> T | None:
-        if name in self.disabled:
+        if name in self.disabled or not self.home_available:
             return None
         try:
             async with asyncio.timeout(REQUEST_TIMEOUT_SECONDS):
@@ -91,11 +132,20 @@ class CasaExperimentalCoordinator(DataUpdateCoordinator[ExperimentalData]):
             return None
 
     async def _async_update_data(self) -> ExperimentalData:
+        # Only the explicit option-on setup probe may fetch without entity listeners.
+        endpoints = {WEATHER, CREDITS} if self._initial_probe else set(self.async_contexts())
+        self._initial_probe = False
+        if not self.home_available:
+            return ExperimentalData()
         try:
-            weather = await self._fetch(WEATHER, self.api.weather)
-            credits = await self._fetch(CREDITS, self.api.credits_summary)
-        except CasaAuthError as err:
-            raise ConfigEntryAuthFailed("Casa rejected the refresh token") from err
-        if weather is None and credits is None and self.disabled != {WEATHER, CREDITS}:
+            weather = await self._fetch(WEATHER, self.api.weather) if WEATHER in endpoints else None
+            credits = (
+                await self._fetch(CREDITS, self.api.credits_summary)
+                if CREDITS in endpoints
+                else None
+            )
+        except CasaAuthError:
+            raise ConfigEntryAuthFailed("Casa rejected the refresh token") from None
+        if weather is None and credits is None and endpoints - self.disabled:
             raise UpdateFailed("Casa experimental endpoints returned no data")
         return ExperimentalData(weather=weather, credits=credits)

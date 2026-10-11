@@ -104,6 +104,7 @@ async def test_user_errors_then_recover(
     )
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": key}
+    device_id = mock_api.flow_cls.call_args.kwargs["device_id"]
 
     mock_api.bootstrap.side_effect = None
     mock_api.bootstrap.return_value = bootstrap_model()
@@ -111,6 +112,10 @@ async def test_user_errors_then_recover(
         flow_id, {CONF_REFRESH_TOKEN: REFRESH_TOKEN}
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    assert result["data"][CONF_DEVICE_ID] == device_id
+    assert mock_api.flow_cls.call_args.kwargs["device_id"] == device_id
+    assert mock_api.init_cls.call_args.kwargs["device_id"] == device_id
 
 
 async def test_unknown_error_logs_class_only(

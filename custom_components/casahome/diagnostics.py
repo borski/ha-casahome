@@ -22,6 +22,7 @@ TO_REDACT_DATA = {
     "avatar_url",
     "avatar_url_cache_key",
     "calendar_sync_email",
+    "calendar_sync_options",
     "user_prefs",
     "waitlist_entries",
     # Home location and media
@@ -72,7 +73,7 @@ def _declared_only(bootstrap: Bootstrap) -> dict[str, Any]:
             )
         homes.append(dumped)
     data["homes"] = homes
-    # app_update and calendar options are plain nested objects. Keep only declared keys.
+    # app_update has a known model. Untyped calendar options are redacted as a whole.
     if bootstrap.app_update is not None:
         data["app_update"] = bootstrap.app_update.model_dump(
             mode="json", include=set(type(bootstrap.app_update).model_fields)

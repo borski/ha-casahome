@@ -78,7 +78,7 @@ With the option on, each home also gets these, disabled by default in the entity
 
 | Entity | Notes |
 |--------|-------|
-| Weather temperature (experimental) | Unavailable if the unit string isn't recognized |
+| Weather temperature (experimental) | Unavailable if the unit string isn't recognized or the value isn't finite |
 | Weather condition (experimental) | |
 | Credits available (experimental) | |
 | Handyman hourly rate (experimental) | Assumes cents in USD |
@@ -87,13 +87,13 @@ These endpoints' paths and methods come from disassembling the app. They may ret
 
 ## Data updates
 
-The integration polls Casa's bootstrap endpoint every 15 minutes. Experimental endpoints, when enabled, poll every 15 minutes per home. There's no push.
+The integration polls Casa's bootstrap endpoint every 15 minutes. Enabling the experimental option probes weather and credits once per home. After that, experimental polling runs every 15 minutes only for endpoint families with enabled entities. It pauses when bootstrap fails or the home disappears, and refreshes when the home returns. There's no push.
 
-If the refresh token stops working, Home Assistant starts a reauth flow. Paste a new token and the entry reloads. If Casa rotates the token on refresh, the integration saves the new one.
+If the refresh token stops working, Home Assistant starts a reauth flow. Paste a new token and the entry reloads. If Casa rotates the token on refresh, the integration saves the new one. Old authentication instances can't replace tokens accepted during reauth or after unload. Configuration retries reuse one device ID per flow.
 
 ## Privacy
 
-Diagnostics redact contact details, address, coordinates, payment and membership billing fields, the Matterport model and password, agreement text, the refresh token, and the device id. Fields Casa adds later are dropped from diagnostics rather than passed through.
+Diagnostics redact contact details, address, coordinates, payment and membership billing fields, the Matterport model and password, agreement text, the refresh token, and the device id. Untyped calendar options are redacted as a whole. Undeclared fields Casa adds later are dropped rather than passed through. Known SDK errors are converted to sanitized Home Assistant errors without sensitive exception chains.
 
 ## Known limitations
 
