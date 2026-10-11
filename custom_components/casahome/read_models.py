@@ -40,6 +40,7 @@ class InventoryRecord:
     model: str | None
     serial_number: str | None
     room: str | None
+    known_rooms: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -75,11 +76,10 @@ def inventory_data(response: HomeDetailsResponse) -> ReadData:
     rooms = {
         room.id: bounded_text(room.name) for story in response.home.stories for room in story.rooms
     }
-    room_names = {
-        room.name: bounded_text(room.name)
-        for story in response.home.stories
-        for room in story.rooms
-    }
+    room_names: dict[str, list[str]] = {}
+    for story in response.home.stories:
+        for room in story.rooms:
+            room_names.setdefault(room.name, []).append(room.id)
     records: list[InventoryRecord] = []
     seen: set[str] = set()
     for entity in response.entities:
@@ -92,23 +92,29 @@ def inventory_data(response: HomeDetailsResponse) -> ReadData:
             continue
         serial = entity.property_value("serial_number")
         # v3 rooms may be names. Accept only exact names or IDs from this home.
-        # Choose the first valid explicit reference, then fall back to the map.
+        # Keep the legacy first-room suggestion, but retain all known names so
+        # naming and placement never mistake a shared item for a single-room one.
         room_refs = [
             *entity.rooms,
             *(room_id for room_id, ids in response.room_entity_map.items() if entity.id in ids),
         ]
+        resolved_rooms = {
+            room_id: name
+            for ref in room_refs
+            for room_id in ([ref] if ref in rooms else room_names.get(ref, []))
+            if (name := rooms.get(room_id))
+        }
+        known_rooms = tuple(resolved_rooms.values())
         records.append(
             InventoryRecord(
                 id=entity.id,
-                name=bounded_text(entity.type) or "Casa inventory item",
+                name=bounded_text(entity.type) or "Inventory item",
                 status=bounded_text(entity.status) or "unknown",
                 manufacturer=bounded_text(entity.make.name) if entity.make else None,
                 model=bounded_text(entity.model.name) if entity.model else None,
                 serial_number=bounded_text(serial) if isinstance(serial, str) else None,
-                room=next(
-                    (name for ref in room_refs if (name := rooms.get(ref) or room_names.get(ref))),
-                    None,
-                ),
+                room=next(iter(known_rooms), None),
+                known_rooms=known_rooms,
             )
         )
     return ReadData(counts=(("inventory_count", len(seen)),), inventory=tuple(records))
