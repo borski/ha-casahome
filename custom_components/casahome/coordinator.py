@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from casahome import (
@@ -14,7 +15,7 @@ from casahome import (
     CasaResponseError,
 )
 from casahome.models import Bootstrap
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -32,7 +33,14 @@ class CasaCoordinator(DataUpdateCoordinator[Bootstrap]):
 
     config_entry: CasaConfigEntry
 
-    def __init__(self, hass: HomeAssistant, entry: CasaConfigEntry, api: CasaApi) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: CasaConfigEntry,
+        api: CasaApi,
+        *,
+        resume_token_persistence: Callable[[], None],
+    ) -> None:
         super().__init__(
             hass,
             _LOGGER,
@@ -43,8 +51,14 @@ class CasaCoordinator(DataUpdateCoordinator[Bootstrap]):
         self.api = api
         self._schema_warned = False
         self.token_persistence_active = True
+        self._resume_token_persistence = resume_token_persistence
         # Per home, only populated when the experimental option is on.
         self.experimental: dict[str, CasaExperimentalCoordinator] = {}
+
+    @callback
+    def async_resume_token_persistence(self) -> None:
+        """Reconcile the current SDK token after an unsuccessful unload."""
+        self._resume_token_persistence()
 
     async def _async_update_data(self) -> Bootstrap:
         try:

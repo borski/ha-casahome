@@ -36,6 +36,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CasaConfigEntry) -> bool
             coordinator is None
             or not coordinator.token_persistence_active
             or entry.data[CONF_REFRESH_TOKEN] != persisted_token
+            or new_token == persisted_token
         ):
             return
         hass.config_entries.async_update_entry(
@@ -54,7 +55,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: CasaConfigEntry) -> bool
         device_id=entry.data[CONF_DEVICE_ID],
         timezone=hass.config.time_zone,
     )
-    coordinator = CasaCoordinator(hass, entry, api)
+
+    @callback
+    def _resume_token_persistence() -> None:
+        # A refresh may have rotated while writes were paused for unload. The SDK
+        # won't repeat its callback for the same token, so reconcile explicitly.
+        assert coordinator is not None
+        coordinator.token_persistence_active = True
+        _persist_rotated_token(auth.refresh_token)
+
+    coordinator = CasaCoordinator(
+        hass, entry, api, resume_token_persistence=_resume_token_persistence
+    )
 
     @callback
     def _invalidate_token_persistence() -> None:
@@ -95,7 +107,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: CasaConfigEntry) -> boo
     """Unload a config entry. The aiohttp session is HA's shared one, so it stays open."""
     coordinator = entry.runtime_data
     coordinator.token_persistence_active = False
-    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if not unloaded:
-        coordinator.token_persistence_active = True
-    return unloaded
+    unloaded = False
+    try:
+        unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+        return unloaded
+    finally:
+        if not unloaded:
+            coordinator.async_resume_token_persistence()

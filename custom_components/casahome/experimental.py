@@ -75,9 +75,10 @@ class CasaExperimentalCoordinator(DataUpdateCoordinator[ExperimentalData]):
             main_coordinator if main_coordinator is not None else entry.runtime_data
         )
         self._home_available = self.home_available
+        self._home_generation = 0
         self._initial_probe = True
         # Lives for the life of the entry. A reload (or HA restart) retries.
-        self.disabled: set[str] = set()
+        self.disabled: set[ExperimentalEndpoint] = set()
 
     @property
     def home_available(self) -> bool:
@@ -94,6 +95,9 @@ class CasaExperimentalCoordinator(DataUpdateCoordinator[ExperimentalData]):
         was_available = self._home_available
         self._home_available = self.home_available
         if not self._home_available:
+            if was_available:
+                self._home_generation += 1
+                self.async_set_updated_data(ExperimentalData())
             self._unschedule_refresh()
         elif not was_available and any(self.async_contexts()):
             self.config_entry.async_create_background_task(
@@ -108,15 +112,20 @@ class CasaExperimentalCoordinator(DataUpdateCoordinator[ExperimentalData]):
         if self.home_available:
             super()._schedule_refresh()
 
-    async def _fetch[T](self, name: str, call: Callable[[str], Awaitable[T]]) -> T | None:
+    async def _fetch[T](
+        self, name: ExperimentalEndpoint, call: Callable[[str], Awaitable[T]]
+    ) -> T | None:
         if name in self.disabled or not self.home_available:
             return None
+        generation = self._home_generation
         try:
             async with asyncio.timeout(REQUEST_TIMEOUT_SECONDS):
                 return await call(self.home_id)
         except CasaAuthError:
             raise
         except CasaApiError as err:
+            if generation != self._home_generation or not self.home_available:
+                return None
             if err.status in DISABLING_STATUSES:
                 self.disabled.add(name)
                 _LOGGER.warning(
@@ -133,19 +142,35 @@ class CasaExperimentalCoordinator(DataUpdateCoordinator[ExperimentalData]):
 
     async def _async_update_data(self) -> ExperimentalData:
         # Only the explicit option-on setup probe may fetch without entity listeners.
-        endpoints = {WEATHER, CREDITS} if self._initial_probe else set(self.async_contexts())
+        initial_probe = self._initial_probe
         self._initial_probe = False
         if not self.home_available:
             return ExperimentalData()
+        generation = self._home_generation
+        attempted: set[ExperimentalEndpoint] = set()
+        weather = None
+        credits = None
         try:
-            weather = await self._fetch(WEATHER, self.api.weather) if WEATHER in endpoints else None
-            credits = (
-                await self._fetch(CREDITS, self.api.credits_summary)
-                if CREDITS in endpoints
-                else None
-            )
+            if initial_probe or WEATHER in self.async_contexts():
+                attempted.add(WEATHER)
+                weather = await self._fetch(WEATHER, self.api.weather)
+            if (
+                generation == self._home_generation
+                and self.home_available
+                and (initial_probe or CREDITS in self.async_contexts())
+            ):
+                attempted.add(CREDITS)
+                credits = await self._fetch(CREDITS, self.api.credits_summary)
         except CasaAuthError:
             raise ConfigEntryAuthFailed("Casa rejected the refresh token") from None
+        if generation != self._home_generation or not self.home_available:
+            if self.home_available and any(self.async_contexts()):
+                # Queue a fresh cycle if the earlier recovery debounce expired in flight.
+                await self.async_request_refresh()
+            return ExperimentalData()
+        endpoints = attempted if initial_probe else attempted.intersection(self.async_contexts())
+        weather = weather if WEATHER in endpoints else None
+        credits = credits if CREDITS in endpoints else None
         if weather is None and credits is None and endpoints - self.disabled:
             raise UpdateFailed("Casa experimental endpoints returned no data")
         return ExperimentalData(weather=weather, credits=credits)

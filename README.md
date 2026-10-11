@@ -87,9 +87,9 @@ These endpoints' paths and methods come from disassembling the app. They may ret
 
 ## Data updates
 
-The integration polls Casa's bootstrap endpoint every 15 minutes. Enabling the experimental option probes weather and credits once per home. After that, experimental polling runs every 15 minutes only for endpoint families with enabled entities. It pauses when bootstrap fails or the home disappears, and refreshes when the home returns. There's no push.
+The integration polls Casa's bootstrap endpoint every 15 minutes. Enabling the experimental option probes weather and credits once per home. After that, experimental polling runs every 15 minutes only for endpoint families with enabled entities, checked before each request starts. It pauses when bootstrap fails or the home disappears, and refreshes when the home returns. Experimental values stay unavailable until fresh recovery data arrives. Replies spanning a home loss aren't reused. There's no push.
 
-If the refresh token stops working, Home Assistant starts a reauth flow. Paste a new token and the entry reloads. If Casa rotates the token on refresh, the integration saves the new one. Old authentication instances can't replace tokens accepted during reauth or after unload. Configuration retries reuse one device ID per flow.
+If the refresh token stops working, Home Assistant starts a reauth flow. Paste a new token and the entry reloads. If Casa rotates the token on refresh, the integration saves the new one. Old authentication instances can't replace tokens accepted during reauth or after unload. An unsuccessful unload reconciles any rotation that occurred while persistence was paused, without overwriting replacement credentials. Configuration retries reuse one device ID per flow.
 
 ## Privacy
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import traceback
 from datetime import timedelta
@@ -15,10 +16,11 @@ from homeassistant.config_entries import (
     SOURCE_REAUTH,
     ConfigEntryState,
 )
-from homeassistant.const import STATE_UNAVAILABLE
-from homeassistant.core import HomeAssistant
+from homeassistant.const import EVENT_STATE_CHANGED, STATE_UNAVAILABLE
+from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -26,7 +28,12 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.casahome.const import CONF_ENABLE_EXPERIMENTAL, DOMAIN
-from custom_components.casahome.experimental import CREDITS, WEATHER, CasaExperimentalCoordinator
+from custom_components.casahome.experimental import (
+    CREDITS,
+    WEATHER,
+    CasaExperimentalCoordinator,
+    ExperimentalData,
+)
 
 from .conftest import HOME_ID, bootstrap_model
 
@@ -100,6 +107,12 @@ async def _enable_sensors(
 def _experimental(entry: MockConfigEntry) -> CasaExperimentalCoordinator:
     coordinator: CasaExperimentalCoordinator = entry.runtime_data.experimental[HOME_ID]
     return coordinator
+
+
+def _assert_experimental_unavailable(hass: HomeAssistant) -> None:
+    for key in EXPERIMENTAL_KEYS:
+        state = hass.states.get(_entity_id(hass, key))
+        assert state is not None and state.state == STATE_UNAVAILABLE
 
 
 async def test_option_off_makes_zero_unverified_calls(
@@ -502,3 +515,313 @@ async def test_auth_error_suppresses_sensitive_exception_chain(
     assert raised.value.__cause__ is None
     assert raised.value.__suppress_context__
     assert "synthetic-secret-token" not in "".join(traceback.format_exception(raised.value))
+
+
+@pytest.mark.parametrize("disable_all", [False, True])
+@pytest.mark.parametrize("weather_fails", [False, True])
+async def test_disabled_family_is_not_started_after_inflight_weather(
+    hass: HomeAssistant,
+    api_ok: MagicMock,
+    experimental_entry: MockConfigEntry,
+    disable_all: bool,
+    weather_fails: bool,
+) -> None:
+    await _setup(hass, experimental_entry)
+    await _enable_all(hass, experimental_entry)
+    coordinator = _experimental(experimental_entry)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def blocked_weather(home_id: str) -> WeatherResponse:
+        assert home_id == HOME_ID
+        entered.set()
+        await release.wait()
+        if weather_fails:
+            raise CasaConnectionError("synthetic weather failure")
+        return weather()
+
+    api_ok.weather.side_effect = blocked_weather
+    api_ok.credits_summary.reset_mock()
+    refresh = asyncio.create_task(coordinator.async_refresh())
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        keys = EXPERIMENTAL_KEYS if disable_all else ("credits_available", "handyman_hourly_rate")
+        registry = er.async_get(hass)
+        for key in keys:
+            registry.async_update_entity(
+                _entity_id(hass, key), disabled_by=er.RegistryEntryDisabler.USER
+            )
+        await hass.async_block_till_done()
+        assert set(coordinator.async_contexts()) == (set() if disable_all else {WEATHER})
+        assert not refresh.done()  # Removing listeners mustn't cancel the active SDK call.
+    finally:
+        release.set()
+        await asyncio.wait_for(refresh, timeout=5)
+
+    api_ok.credits_summary.assert_not_called()
+    assert coordinator.last_update_success is (disable_all or not weather_fails)
+    if disable_all:
+        assert coordinator.data == ExperimentalData()
+        assert coordinator._unsub_refresh is None
+    elif weather_fails:
+        assert isinstance(coordinator.last_exception, UpdateFailed)
+
+
+async def test_inactive_weather_success_does_not_mask_active_credits_failure(
+    hass: HomeAssistant, api_ok: MagicMock, experimental_entry: MockConfigEntry
+) -> None:
+    await _setup(hass, experimental_entry)
+    await _enable_all(hass, experimental_entry)
+    coordinator = _experimental(experimental_entry)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def blocked_weather(home_id: str) -> WeatherResponse:
+        entered.set()
+        await release.wait()
+        return weather()
+
+    api_ok.weather.side_effect = blocked_weather
+    api_ok.credits_summary.side_effect = CasaConnectionError("synthetic credits failure")
+    api_ok.credits_summary.reset_mock()
+    refresh = asyncio.create_task(coordinator.async_refresh())
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        registry = er.async_get(hass)
+        for key in ("weather_temperature", "weather_condition"):
+            registry.async_update_entity(
+                _entity_id(hass, key), disabled_by=er.RegistryEntryDisabler.USER
+            )
+        await hass.async_block_till_done()
+        assert set(coordinator.async_contexts()) == {CREDITS}
+    finally:
+        release.set()
+        await asyncio.wait_for(refresh, timeout=5)
+
+    api_ok.credits_summary.assert_awaited_once_with(HOME_ID)
+    assert not coordinator.last_update_success
+    assert isinstance(coordinator.last_exception, UpdateFailed)
+    for key in ("credits_available", "handyman_hourly_rate"):
+        state = hass.states.get(_entity_id(hass, key))
+        assert state is not None and state.state == STATE_UNAVAILABLE
+
+
+@pytest.mark.parametrize("bootstrap_fails", [False, True])
+@pytest.mark.parametrize("recovery_fails", [False, True])
+async def test_recovery_requires_fresh_experimental_data(
+    hass: HomeAssistant,
+    api_ok: MagicMock,
+    experimental_entry: MockConfigEntry,
+    bootstrap_fails: bool,
+    recovery_fails: bool,
+) -> None:
+    await _setup(hass, experimental_entry)
+    await _enable_all(hass, experimental_entry)
+    main = experimental_entry.runtime_data
+    coordinator = _experimental(experimental_entry)
+    if bootstrap_fails:
+        main.async_set_update_error(Exception("synthetic bootstrap failure"))
+    else:
+        main.async_set_updated_data(bootstrap_model(homes=[]))
+    assert coordinator.data == ExperimentalData()
+    _assert_experimental_unavailable(hass)
+    assert coordinator._unsub_refresh is None
+
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    fresh_weather = weather().model_copy(
+        update={"temperature_degrees": 72.0, "condition_type": "sunny"}
+    )
+    fresh_credits = credits().model_copy(update={"total_available": 7})
+
+    async def blocked_weather(home_id: str) -> WeatherResponse:
+        entered.set()
+        await release.wait()
+        if recovery_fails:
+            raise CasaConnectionError("synthetic recovery failure")
+        return fresh_weather
+
+    api_ok.weather.side_effect = blocked_weather
+    api_ok.credits_summary.side_effect = (
+        CasaConnectionError("synthetic recovery failure") if recovery_fails else None
+    )
+    api_ok.credits_summary.return_value = fresh_credits
+    entity_ids = {_entity_id(hass, key) for key in EXPERIMENTAL_KEYS}
+    observed_states: list[str] = []
+
+    @callback
+    def record_state(event: Event[EventStateChangedData]) -> None:
+        if event.data["entity_id"] in entity_ids and (state := event.data["new_state"]):
+            observed_states.append(state.state)
+
+    unsubscribe = hass.bus.async_listen(EVENT_STATE_CHANGED, record_state)
+    try:
+        main.async_set_updated_data(bootstrap_model())
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        _assert_experimental_unavailable(hass)
+        assert coordinator.data == ExperimentalData()
+        assert all(state == STATE_UNAVAILABLE for state in observed_states)
+    finally:
+        release.set()
+        await hass.async_block_till_done(wait_background_tasks=True)
+        unsubscribe()
+
+    if recovery_fails:
+        assert not coordinator.last_update_success
+        assert coordinator.data == ExperimentalData()
+        _assert_experimental_unavailable(hass)
+        assert all(state == STATE_UNAVAILABLE for state in observed_states)
+    else:
+        assert coordinator.last_update_success
+        assert coordinator.data == ExperimentalData(weather=fresh_weather, credits=fresh_credits)
+        condition = hass.states.get(_entity_id(hass, "weather_condition"))
+        assert condition is not None and condition.state == "sunny"
+        available = hass.states.get(_entity_id(hass, "credits_available"))
+        assert available is not None and available.state == "7"
+
+
+@pytest.mark.parametrize("blocked_endpoint", [WEATHER, CREDITS])
+@pytest.mark.parametrize("stale_endpoint_missing", [False, True])
+@pytest.mark.parametrize("recovery_debounce_expires", [False, True])
+async def test_inflight_response_cannot_survive_home_loss_and_reappearance(
+    hass: HomeAssistant,
+    api_ok: MagicMock,
+    experimental_entry: MockConfigEntry,
+    blocked_endpoint: str,
+    stale_endpoint_missing: bool,
+    recovery_debounce_expires: bool,
+) -> None:
+    await _setup(hass, experimental_entry)
+    await _enable_all(hass, experimental_entry)
+    main = experimental_entry.runtime_data
+    coordinator = _experimental(experimental_entry)
+    stale_entered = asyncio.Event()
+    stale_release = asyncio.Event()
+    fresh_entered = asyncio.Event()
+    fresh_release = asyncio.Event()
+    fresh_weather = weather().model_copy(
+        update={"temperature_degrees": 72.0, "condition_type": "sunny"}
+    )
+    fresh_credits = credits().model_copy(update={"total_available": 7})
+    weather_calls = 0
+    credits_calls = 0
+
+    async def wait_for_stale_response() -> None:
+        stale_entered.set()
+        await stale_release.wait()
+        if stale_endpoint_missing:
+            raise CasaApiError(404, "synthetic missing home endpoint")
+
+    async def weather_response(home_id: str) -> WeatherResponse:
+        nonlocal weather_calls
+        weather_calls += 1
+        if weather_calls == 1:
+            if blocked_endpoint == WEATHER:
+                await wait_for_stale_response()
+            return weather()
+        fresh_entered.set()
+        await fresh_release.wait()
+        return fresh_weather
+
+    async def credits_response(home_id: str) -> MemberCredits:
+        nonlocal credits_calls
+        credits_calls += 1
+        if blocked_endpoint == CREDITS and credits_calls == 1:
+            await wait_for_stale_response()
+            return credits()
+        return fresh_credits
+
+    api_ok.weather.side_effect = weather_response
+    api_ok.credits_summary.side_effect = credits_response
+    refresh = asyncio.create_task(coordinator.async_refresh())
+    try:
+        await asyncio.wait_for(stale_entered.wait(), timeout=5)
+        main.async_set_updated_data(bootstrap_model(homes=[]))
+        assert coordinator.data == ExperimentalData()
+        _assert_experimental_unavailable(hass)
+        main.async_set_updated_data(bootstrap_model())
+        _assert_experimental_unavailable(hass)
+        await asyncio.sleep(0)  # Let the real recovery request enter HA's debouncer.
+        if recovery_debounce_expires:
+            async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=11))
+            await hass.async_block_till_done(wait_background_tasks=True)
+            assert weather_calls == 1
+
+        stale_release.set()
+        await asyncio.wait_for(refresh, timeout=5)
+        assert coordinator.data == ExperimentalData()
+        assert coordinator.disabled == set()  # A stale 404 mustn't disable the recovered endpoint.
+        _assert_experimental_unavailable(hass)
+        if blocked_endpoint == WEATHER:
+            assert credits_calls == 0  # Don't continue an invalidated polling cycle.
+
+        async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=22))
+        await asyncio.wait_for(fresh_entered.wait(), timeout=5)
+        assert coordinator.data == ExperimentalData()
+        _assert_experimental_unavailable(hass)
+    finally:
+        stale_release.set()
+        fresh_release.set()
+        await asyncio.wait_for(refresh, timeout=5)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert coordinator.last_update_success
+    assert coordinator.data == ExperimentalData(weather=fresh_weather, credits=fresh_credits)
+    assert weather_calls == 2
+    assert credits_calls == (2 if blocked_endpoint == CREDITS else 1)
+    condition = hass.states.get(_entity_id(hass, "weather_condition"))
+    assert condition is not None and condition.state == "sunny"
+    available = hass.states.get(_entity_id(hass, "credits_available"))
+    assert available is not None and available.state == "7"
+
+
+@pytest.mark.parametrize("blocked_endpoint", [WEATHER, CREDITS])
+async def test_unload_cancels_inflight_request_and_pending_home_recovery(
+    hass: HomeAssistant,
+    api_ok: MagicMock,
+    experimental_entry: MockConfigEntry,
+    blocked_endpoint: str,
+) -> None:
+    await _setup(hass, experimental_entry)
+    await _enable_all(hass, experimental_entry)
+    main = experimental_entry.runtime_data
+    coordinator = _experimental(experimental_entry)
+    entered = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def blocked_response(home_id: str) -> None:
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    api_ok.weather.reset_mock()
+    api_ok.credits_summary.reset_mock()
+    if blocked_endpoint == WEATHER:
+        api_ok.weather.side_effect = blocked_response
+    else:
+        api_ok.credits_summary.side_effect = blocked_response
+    refresh = experimental_entry.async_create_background_task(
+        hass, coordinator.async_refresh(), name="Synthetic experimental refresh"
+    )
+    await asyncio.wait_for(entered.wait(), timeout=5)
+    main.async_set_updated_data(bootstrap_model(homes=[]))
+    main.async_set_updated_data(bootstrap_model())
+    await asyncio.sleep(0)
+    _assert_experimental_unavailable(hass)
+
+    assert await hass.config_entries.async_unload(experimental_entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert refresh.cancelled()
+    assert cancelled.is_set()
+    assert not coordinator._listeners
+    assert not main._listeners
+    assert coordinator._unsub_refresh is None
+    assert coordinator._debounced_refresh._timer_task is None
+    assert not experimental_entry._background_tasks
+
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(minutes=46))
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert api_ok.weather.await_count == 1
+    assert api_ok.credits_summary.await_count == (1 if blocked_endpoint == CREDITS else 0)
