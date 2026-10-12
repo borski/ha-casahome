@@ -34,8 +34,13 @@ def suggestions(
                             "thumbnail_url": "https://example.invalid/signed-thumbnail",
                         }
                     ],
-                    "question_rounds": [{"text": "synthetic-private-question"}],
-                    "destination": {"url": "https://example.invalid/private-destination"},
+                    "question_rounds": [
+                        {
+                            "id": "synthetic-round",
+                            "questions": [{"text": "synthetic-private-question"}],
+                        }
+                    ],
+                    "destination": {"kind": "request", "id": "synthetic-destination"},
                     "unexpected_extra": "synthetic-private-extra",
                 }
                 for index in range(count)

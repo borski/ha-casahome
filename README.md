@@ -10,7 +10,7 @@ Each Casa home becomes a device with membership, badge, weather, credit, invento
 
 Alpha. Casa has no public API, so endpoints and response shapes can change without notice. Expect breaking changes until 1.0.
 
-Version 0.3.0 expands inventory, request attention, maintenance, mail/packages, and service calendars. The SDK pin remains PyPI 0.2.0. See the [releases](https://github.com/borski/ha-casahome/releases) for installable versions.
+Version 0.3.1 improves inventory names, keeps duplicate names stable, and lets eligible virtual devices follow Casa room changes in Home Assistant. It pins python-casahome 0.3.1. See the [releases](https://github.com/borski/ha-casahome/releases) for installable versions.
 
 ## Requirements
 
@@ -18,7 +18,7 @@ Version 0.3.0 expands inventory, request attention, maintenance, mail/packages, 
 - A Casa account.
 - A Casa refresh token. See [Getting a refresh token](#getting-a-refresh-token).
 
-Home Assistant installs [python-casahome 0.2.0](https://pypi.org/project/python-casahome/0.2.0/) from PyPI. The dependency is pinned to that version.
+Version 0.3.1 pins [python-casahome](https://pypi.org/project/python-casahome/) 0.3.1 from PyPI. Earlier releases keep their own dependency pins.
 
 ## Installation
 
@@ -28,7 +28,7 @@ Home Assistant installs [python-casahome 0.2.0](https://pypi.org/project/python-
 2. Add `https://github.com/borski/ha-casahome` with category Integration.
 3. Install **Casa**, select the latest release, and restart Home Assistant.
 
-If Casa is already installed, open its HACS page and choose Update or Redownload, then select `v0.3.0`. Restart Home Assistant after the download. Existing account configuration and entity IDs are preserved.
+Existing users can select v0.3.1 from the Casa HACS page using Update or Redownload. Restart Home Assistant after the download. The update doesn't rename existing entity IDs or change account configuration.
 
 ### Manual
 
@@ -40,7 +40,7 @@ Alternatively, copy `custom_components/casahome` from the tagged source into you
 
 Casa has no official token export or login API for third parties. You need a refresh token from your own Casa app session. The [python-casahome README](https://github.com/borski/python-casahome#authentication) describes how to get one.
 
-Treat the refresh token like a password. Anyone who has it can read your Casa account. Home Assistant stores it in the config entry, so your configuration directory and backups contain it too.
+Treat the refresh token like a password. Anyone who has it can access your Casa account as you. Home Assistant stores it in the config entry, so your configuration directory and backups contain it too.
 
 Tokens can be revoked or stop working. When that happens, Home Assistant starts a reauth flow and asks for a new token.
 
@@ -110,45 +110,35 @@ That's 33 entities per home: 21 sensors, 9 binary sensors, 1 todo list, and 2 ca
 
 One `home_details` GET fetches stories, rooms, and all inventory entities. The inventory count includes unique IDs across all categories. Appliances, Electronics, Utility/Utilities, and Safety categories create virtual Casa inventory devices. Matching is case-insensitive and exact. Other and future categories, including bulbs, paint, and structure, still contribute to the total but don't create individual devices.
 
-Devices have home-scoped stable identifiers, a home parent link, make, model, and the named `serial_number` property when supplied. Their single diagnostic sensor reports Casa's record status as bounded text, including new statuses without reinterpretation. They never merge identities with physical devices.
+Devices have home-scoped stable identifiers, a home parent link, make, model, and serial number when supplied. Their single diagnostic sensor reports Casa's record status as bounded text. They never merge identities with physical devices.
 
-Default names no longer include `Casa inventory`. A single known room produces `Garage Backup Battery` or `Bedroom Air Purifier`. Without one unambiguous room, the default is `Acme Air Purifier` when make is known, otherwise `Air Purifier` or `Inventory item`. A type that already starts with its room isn't prefixed again. Make, model, and serial remain separate registry metadata.
+In v0.3.1, default names use a single known room, such as `Garage Backup Battery`. If the room is unknown or shared, they use the make when available, such as `Acme Air Purifier`, then the item type. Names no longer start with `Casa inventory`. Make, model, and serial stay in device metadata.
 
-Same-room/type collisions use differing models, then makes, in parentheses. Identical labels receive numbers, such as `Garage Backup Battery 1` through `Garage Backup Battery 4`. Initial allocation sorts the stable inventory IDs internally. Subsequent response order never selects numbers. Retained registry defaults reserve names, including numbers for absent records. Removing and restoring records, adding lower-sorting IDs, and reloading don't renumber existing duplicates. Useful qualifiers survive a group shrinking. No left/right placement or physical identity is guessed, and IDs aren't displayed as labels.
+When names collide, differing models or makes distinguish them. Identical labels get numbers, such as `Garage Backup Battery 1` and `Garage Backup Battery 2`. Existing numbers and useful qualifiers survive response reordering, missing records, new records, and reloads while the registry devices remain. The names don't imply physical placement beyond a known room.
 
-Names use sanitized, bounded source text. Each combined label is capped at 200 characters to leave room for numbers and HA's diagnostic entity name. Long prefix/type components and discriminators are shortened. Numbers resolve any remaining collisions. The complete device name never exceeds 255 characters. Changing source room/type/model/make can change the generated default. Deleting registry devices discards their number reservations.
+Names use bounded source text with URLs and control characters removed. Changes to Casa room, type, model, or make can change the generated default. Deleting a registry device discards its reserved number.
 
-On the next successful normal inventory refresh or reload, existing `Casa inventory` defaults migrate to these names. Metadata updates also cover disabled status sensors when the inventory family is active. Entity IDs, unique IDs, device identities, custom entity names, device `name_by_user`, and disabled choices stay unchanged. No extra reads, config version changes, or naming storage are needed.
+On the next successful inventory refresh, including one triggered by a reload, older `Casa inventory` defaults change to the new names. Existing entity IDs, unique IDs, device identities, custom names, and disabled choices stay intact.
 
-Room references accept only exact names or IDs from that home's stories, including valid `room_entity_map` references. Placement considers all known rooms. A shared item with multiple rooms stays unassigned, even when one room has an exact HA match. The existing `suggested_room` attribute retains the first valid reference for compatibility. Unknown source names and IDs aren't exposed.
+Room references must match rooms in that Casa home. A record linked to multiple rooms stays unassigned. The diagnostic sensor retains a `suggested_room` attribute for manual placement.
 
-Placement requires exactly one known room and exactly one existing HA area whose name or alias matches after case folding and whitespace normalization. There are no fuzzy matches or new areas. HA's `suggested_area` isn't used. An unsuccessful match leaves the device unassigned with `suggested_room` available for manual placement.
+Automatic area placement requires one known room and one existing Home Assistant area with a matching name or alias. Matching ignores case and extra whitespace. The integration never creates an area or guesses a match.
 
-Initial placement runs when a virtual device is first discovered or its legacy default migrates. An existing area, user name, or device disable at that point prevents placement, and the integration never manages that device's area. Otherwise the integration records the area it assigned, or that it found no match, and the area then follows Casa. When an item moves from `Laundry Patio` to `Garage` in Casa, its HA device moves to the `Garage` area on the next inventory refresh. A move to a room with no matching area, or to multiple rooms, clears the area the integration set. A later match, including an area you create afterward, places it again.
+New virtual devices and devices with migrating `Casa inventory` defaults can start following Casa rooms. An existing area, custom device name, or disabled device at that first placement prevents this. Managed devices move to a matching area on the next inventory refresh when their Casa room changes. An unmatched or shared room clears the area the integration set. A later match can place the device again.
 
-To opt out, set the area yourself. Any area you choose, clear, or delete ends automatic management for that device permanently, across room changes and reloads. A custom device name doesn't opt out. Disabled devices aren't moved, but resume following when re-enabled. Devices created by the previous release without this tracking are left alone and don't start following. Only newly discovered devices and legacy `Casa inventory` migrations become managed.
+To opt out, change or clear the device's area in Home Assistant. Deleting its assigned area also ends automatic management. The integration won't take over again on reload. A custom name added after placement doesn't opt out. Disabled managed devices pause following until re-enabled. Existing devices without a migrating default aren't enrolled in area following.
 
-The tracking lives in HA storage as `casahome.<entry_id>.inventory_areas`, keyed by stable inventory identifiers. Absent records keep their entries while their devices remain. Entries for deleted registry devices are pruned, and removing the integration deletes the file. Setting the area back to exactly the one the integration last assigned can't be distinguished from leaving it alone.
+If you set the area back to exactly the one the integration last assigned before the next refresh, it can't distinguish your choice from no change.
 
 New records are discovered dynamically while the inventory family is active. Removed records become unavailable without deleting registry entries. Reappearing records use fresh metadata. Missing make/model/serial stays missing, never inferred from candidate blobs. No static property sensors, model summaries, manuals, images, detail requests, or attachment downloads are created.
 
-On reload, enabled existing inventory-status entities are restored as unavailable placeholders before polling starts. They own normal polling contexts even when the home inventory count is disabled. They don't carry cached record values or add a hidden discovery context. Disabling the count and every status still stops all inventory I/O.
-
 ### Attention, mail, and maintenance
 
-All count and attention entities carry `scope: fetched_response`. Counts describe fetched cards or lists, not account-wide totals, section display counts, or badge totals. Request cards are deduplicated by ID across `needs_review` and sections. Positive explicit flags are combined across duplicates. Invoice/purchase counts, task lanes, vendor contact, message content, and titles don't affect attention.
-
-Mail requires both null `read_at` and null `archived_at`. Packages use the SDK's separate `archived` boolean. Unknown package statuses aren't mapped to delivered or pickup-ready. Maintenance counts use category `plans` and explicit `plan.enabled`, not associations, quoted prices, or opaque plan metadata. Service history uses one home-target aggregate GET with the home ID as the SDK-required target ID. There's no per-device history fanout, guessed overdue date, or latest-service timestamp sensor.
-
-An empty successful response reads as zero. A failed response is unavailable, not zero. One family's failure never makes another unavailable.
+Request attention, mail, package, maintenance, and service history counts carry `scope: fetched_response` and describe only the fetched response. They aren't account-wide totals. A successful empty response reports zero. A failed read makes only that family unavailable.
 
 ### Regular service visits
 
-The regular calendar is separate from onboarding. Its cache spans exactly 31 UTC days, starting at the previous UTC midnight. It refreshes every 15 minutes. `coverage_start` and `coverage_end` describe the actual fetched half-open window. Calendar queries are local only. A query outside coverage fails explicitly instead of fabricating an empty answer. Historical views and a full calendar month may fall outside coverage.
-
-Events use validated IDs, deduplication, UTC instant ordering, and the generic title `Casa service visit`. No vendor, event kind, location, description, links, or opaque payloads are exported. Invalid IDs or time bounds invalidate that family's whole response. The provisional codec assumes integer epoch seconds between 2000 and 2100 and requires end after start. Milliseconds and implausible/reversed values are rejected. Aware query datetimes are compared in UTC, including DST folds.
-
-The calendar exposes `item_schema: provisional` and `timestamp_codec: epoch_seconds_assumed`. An empty live envelope doesn't verify populated items or server interpretation of timestamp units and boundary inclusivity.
+The regular calendar is separate from onboarding. It refreshes every 15 minutes and caches 31 days of UTC coverage beginning at the previous UTC midnight. Calendar queries use that cache and fail when the requested range falls outside it. Events are titled `Casa service visit`. Vendor details, locations, descriptions, and links aren't exposed. Casa's populated event schema and timestamp units remain provisional.
 
 ### Suggested tasks
 
@@ -178,21 +168,17 @@ Bootstrap, weather, credits, suggestions, onboarding, requests, service history,
 | Normal 15-minute updates | `1 + 9N` |
 | When both daily catalogs are also due | Up to `1 + 11N` |
 
-The original weather and credit probe remains in setup. Seven new endpoint reads per home start concurrently as entry-owned background tasks after platforms register contexts, so their latency doesn't serialize or block bootstrap setup. Each is independently bounded by the existing request timeout. Onboarding and suggestions keep their existing setup flow. Calls aren't guaranteed to land at the same wall-clock instant. These budgets exclude token refreshes and SDK retries.
+The original weather and credit probe remains in setup. Up to seven aggregate reads per home start concurrently after enabled entities register. A slow aggregate endpoint doesn't block setup or the other aggregate families. Each read times out after 30 seconds. Onboarding and suggestions keep their existing setup flow. These budgets exclude token refreshes and SDK retries.
 
 Disabled entities don't poll. A new family is active only when it has an enabled entity. To stop inventory reads, disable its home count and all its record-status entities. Discovery itself isn't a polling context. Disabling a calendar removes its respective request. Weather and credits are still fetched once per home at setup, even if their sensors are disabled. A 404/405 disables only the failing endpoint until reload. Other failures retry on that family's normal interval.
 
-If bootstrap fails or a home disappears, its entities immediately go unavailable, caches are cleared, and timers pause. In-flight results from the old home/context generation are discarded, including stale auth failures and 404/405 responses. Recovery requires a fresh response. Unload cancels and awaits active SDK child reads from setup and HA timer dispatch, and clears debounce timers and listeners without closing HA's shared SDK session. There's no push from Casa.
-
-### Wire evidence and provisional contracts
-
-Evidence here comes from the SDK's documented contracts, not additional live probes by this integration change. Inventory entities and populated maintenance catalog variants are VERIFIED in SDK evidence. Requests, mail, packages, service history, and regular calendar have VERIFIED GET paths and empty response envelopes. Their populated item fields remain UNVERIFIED, modeled from static app metadata. Empty lists don't establish a populated contract. Synthetic HA tests establish projection and lifecycle behavior, not server compatibility with every populated account. New fields are dropped rather than exported. Known SDK schema errors make only that family unavailable without logging raw values.
+If bootstrap fails or a home disappears, its entities become unavailable, cached data is cleared, and polling pauses. Results from older aggregate reads are discarded after the home becomes unavailable or a read family loses all enabled entities. Recovery requires a fresh response. Unloading the integration cancels active reads and clears its timers and listeners. Casa doesn't provide push updates.
 
 ## Privacy
 
 Diagnostics redact contact details, address, coordinates, payment and billing fields, Matterport credentials, agreement text, the refresh token, and the device ID. Fields Casa adds later are dropped rather than passed through. Diagnostics don't include inventory metadata, new read-family payloads, suggested tasks, or calendars.
 
-Task titles, visit times, inventory make/model/serial, and suggested rooms are visible to Home Assistant users with access. New count entities don't expose sender/addressee, previews, tracking numbers, QR codes, summaries, invoice/payment data, prices, signed URLs, or source extras. Errors are logged without tokens or raw exception details.
+The home address, pending agreement names, task titles, visit times, inventory make, model, serial number, and suggested rooms are visible to Home Assistant users with access. Count entities don't expose sender or addressee details, previews, tracking numbers, QR codes, summaries, invoice or payment data, prices, signed URLs, or source extras. Errors are logged without tokens or raw exception details.
 
 ## Known limitations
 
@@ -202,7 +188,7 @@ Task titles, visit times, inventory make/model/serial, and suggested rooms are v
 - Suggested tasks only map one known status.
 - Regular service calendar queries must fit its explicit rolling cache coverage. Its item schema and epoch-seconds interpretation remain provisional.
 - Request, mail, package, and service history populated item schemas remain unverified against live responses. Counts apply only to fetched items.
-- No write actions. The integration can't create requests, accept suggestions, or book visits.
+- No Home Assistant write actions. The integration can't create requests, accept suggestions, or book visits. Setup still registers Home Assistant as a Casa device, as described above.
 - Virtual inventory devices aren't physical device connections. Unknown categories don't create devices, and identity candidates aren't guessed.
 - Billing, purchases, and Casa AI chat aren't supported.
 
@@ -212,9 +198,11 @@ Go to Settings, then Devices and services, then **Casa**, then the menu, then De
 
 ## Development
 
+Install the pinned SDK and run the local checks:
+
 ```bash
 uv venv --python 3.14
-uv pip install -p .venv/bin/python -r requirements_test.txt "python-casahome==0.2.0"
+uv pip install -p .venv/bin/python -r requirements_test.txt "python-casahome==0.3.1"
 .venv/bin/pytest -q
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 .venv/bin/mypy custom_components tests

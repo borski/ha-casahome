@@ -10,7 +10,7 @@ rules:
   config-flow: done
   dependency-transparency:
     status: todo
-    comment: python-casahome 0.2.0 is published on PyPI. Dependency-transparency compliance hasn't been reviewed.
+    comment: python-casahome 0.3.1 is published on PyPI. Dependency-transparency compliance hasn't been reviewed.
   docs-actions:
     status: exempt
     comment: The integration registers no actions.
